@@ -1,7 +1,7 @@
 # V2 reasons
 
 This version 2 handles multiples staking
-The updated staking system consists of a central staking contract and user-specific staking contracts. This structure optimizes memory usage, enhances modularity, and isolates staking data per user, ensuring a flexible and secure reward distribution system.
+The updated staking system consists of a stake manager contract and user-specific stake pool contracts. This structure optimizes memory usage, enhances modularity, and isolates staking data per user, ensuring a flexible and secure reward distribution system.
 
 ## Explanation of Key Improvements
 

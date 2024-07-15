@@ -4,31 +4,38 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract CentralStaking is Ownable {
+contract StakeManager is Ownable {
     IERC20 public daoToken;
     IERC20 public fiatToken;
-    mapping(address => address) public userStakingContracts;
+    mapping(address => address) public userStakePools;
 
-    event UserStakingContractDeployed(address indexed user, address stakingContract);
+    event UserStakePoolDeployed(address indexed user, address stakePool);
 
     constructor(address _daoToken, address _fiatToken) {
         daoToken = IERC20(_daoToken);
         fiatToken = IERC20(_fiatToken);
     }
 
-    function deployUserStakingContract() external {
-        require(userStakingContracts[msg.sender] == address(0), "User staking contract already exists");
-        UserStaking stakingContract = new UserStaking(address(daoToken), address(fiatToken), msg.sender);
-        userStakingContracts[msg.sender] = address(stakingContract);
-        emit UserStakingContractDeployed(msg.sender, address(stakingContract));
+    function deployUserStakePool() external {
+        require(
+            userStakePools[msg.sender] == address(0),
+            "User stake pool already exists"
+        );
+        UserStakePool stakePool = new UserStakePool(
+            address(daoToken),
+            address(fiatToken),
+            msg.sender
+        );
+        userStakePools[msg.sender] = address(stakePool);
+        emit UserStakePoolDeployed(msg.sender, address(stakePool));
     }
 
-    function getUserStakingContract(address user) external view returns (address) {
-        return userStakingContracts[user];
+    function getUserStakePool(address user) external view returns (address) {
+        return userStakePools[user];
     }
 }
 
-contract UserStaking is Ownable {
+contract UserStakePool is Ownable {
     IERC20 public daoToken;
     IERC20 public fiatToken;
 
@@ -42,9 +49,18 @@ contract UserStaking is Ownable {
     StakeInfo[] public stakes;
     uint256 public totalStaked;
 
-    event Staked(address indexed user, uint256 amount, uint256 lockDuration, bool isCompound);
+    event Staked(
+        address indexed user,
+        uint256 amount,
+        uint256 lockDuration,
+        bool isCompound
+    );
     event Unstaked(address indexed user, uint256 amount);
-    event RewardDistributed(address indexed user, uint256 amount, bool isCompound);
+    event RewardDistributed(
+        address indexed user,
+        uint256 amount,
+        bool isCompound
+    );
 
     constructor(address _daoToken, address _fiatToken, address owner) {
         daoToken = IERC20(_daoToken);
@@ -52,12 +68,18 @@ contract UserStaking is Ownable {
         transferOwnership(owner);
     }
 
-    function stake(uint256 amount, uint256 lockDuration, bool isCompound) external onlyOwner {
+    function stake(
+        uint256 amount,
+        uint256 lockDuration,
+        bool isCompound
+    ) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         require(lockDuration > 0, "Lock duration must be greater than 0");
         daoToken.transferFrom(msg.sender, address(this), amount);
 
-        stakes.push(StakeInfo(amount, block.timestamp, lockDuration, isCompound));
+        stakes.push(
+            StakeInfo(amount, block.timestamp, lockDuration, isCompound)
+        );
         totalStaked += amount;
 
         emit Staked(msg.sender, amount, lockDuration, isCompound);
@@ -66,7 +88,10 @@ contract UserStaking is Ownable {
     function unstake(uint256 stakeIndex) external onlyOwner {
         require(stakes.length > stakeIndex, "Invalid stake index");
         StakeInfo storage userStake = stakes[stakeIndex];
-        require(block.timestamp >= userStake.startTime + userStake.lockDuration, "Stake is still locked");
+        require(
+            block.timestamp >= userStake.startTime + userStake.lockDuration,
+            "Stake is still locked"
+        );
         uint256 amount = userStake.amount;
 
         // Remove stake from array
@@ -79,7 +104,10 @@ contract UserStaking is Ownable {
         emit Unstaked(msg.sender, amount);
     }
 
-    function distributeRewards(uint256 amount, bool isCompound) external onlyOwner {
+    function distributeRewards(
+        uint256 amount,
+        bool isCompound
+    ) external onlyOwner {
         if (isCompound) {
             daoToken.transfer(msg.sender, amount);
         } else {
@@ -113,7 +141,8 @@ contract UserStaking is Ownable {
 
         for (uint256 i = 0; i < stakes.length; i++) {
             StakeInfo storage userStake = stakes[i];
-            uint256 weight = userStake.amount * userStake.lockDuration / totalWeightedDuration;
+            uint256 weight = (userStake.amount * userStake.lockDuration) /
+                totalWeightedDuration;
             totalRewards += weight; // Placeholder calculation
         }
 
