@@ -34,16 +34,21 @@ contract StakeManager is Ownable {
     }
 
     function distributeRewards(uint256 totalRewards) external onlyOwner {
+        uint256 totalStaked = getTotalStaked();
+        
         for (uint256 i = 0; i < supportedFiatTokens.length; i++) {
             address fiatToken = supportedFiatTokens[i];
-            uint256 totalStaked = getTotalStaked();
-            for (address user : userStakePools) {
+            uint256 totalFiatRewards = totalRewards * IERC20(fiatToken).balanceOf(address(this)) / totalStaked;
+
+            for (uint256 j = 0; j < userStakePools.length; j++) {
+                address user = userStakePools[j];
                 uint256 userStake = UserStakePool(userStakePools[user]).totalStaked();
-                uint256 reward = (userStake * totalRewards) / totalStaked;
-                UserStakePool(userStakePools[user]).receiveRewards(reward);
+                uint256 reward = (userStake * totalFiatRewards) / totalStaked;
+                UserStakePool(userStakePools[user]).receiveRewards(fiatToken, reward);
             }
         }
-    }
+}
+
 
     function distributeFiatRewards(uint256 totalRewards, address fiatToken) external onlyOwner {
         uint256 totalStaked = getTotalStaked();
