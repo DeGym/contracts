@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Voucher is ERC721URIStorage, Ownable {
+contract VoucherManager is ERC721URIStorage, Ownable {
     struct VoucherDetails {
         uint256 tier;
         uint256 duration; // in days
@@ -36,7 +36,7 @@ contract Voucher is ERC721URIStorage, Ownable {
         fiatToken = IERC20(fiatTokenAddress);
     }
 
-    function createVoucher(
+    function purchaseVoucher(
         address owner,
         uint256 tier,
         uint256 duration,
@@ -118,59 +118,11 @@ contract Voucher is ERC721URIStorage, Ownable {
         return vouchers[voucherId];
     }
 
-    function resetDailyLedger(uint256 voucherId) public onlyOwner {
-        require(
-            block.timestamp >= vouchers[voucherId].lastReset + 1 days,
-            "Cannot reset yet"
-        );
-        delete dailyLedger[voucherId];
-        vouchers[voucherId].lastReset = block.timestamp;
-    }
-    function resetDCP(uint256 voucherId) public onlyOwner {
-        VoucherDetails storage voucher = vouchers[voucherId];
-        voucher.remainingDCP = 2 ** voucher.tier;
-        voucher.lastReset = block.timestamp;
-    }
-    function resetVoucher(uint256 voucherId) external onlyOwner {
-        resetDCP(voucherId);
-        resetDailyLedger(voucherId);
+    function setBasePrice(uint256 _basePrice) external onlyOwner {
+        basePrice = _basePrice;
     }
 
-    function canAccessGym(
-        uint256 voucherId,
-        uint256 gymId
-    ) internal view returns (bool) {
-        uint256 accessesToday = 0;
-        for (uint i = 0; i < dailyLedger[voucherId].length; i++) {
-            if (
-                dailyLedger[voucherId][i].gymId == gymId &&
-                (dailyLedger[voucherId][i].timestamp / 86400) ==
-                (block.timestamp / 86400)
-            ) {
-                accessesToday++;
-            }
-        }
-        return accessesToday < vouchers[voucherId].dailyAccessLimit;
-    }
-
-    function checkin(uint256 voucherId, uint256 gymId, uint256 dcpUsed) public {
-        require(
-            vouchers[voucherId].remainingDCP >= dcpUsed,
-            "Insufficient DCP"
-        );
-        require(
-            canAccessGym(voucherId, gymId),
-            "Access limit reached for today"
-        );
-
-        vouchers[voucherId].remainingDCP -= dcpUsed;
-        dailyLedger[voucherId].push(
-            CheckinEntry({
-                dcpUsed: dcpUsed,
-                tierNumber: vouchers[voucherId].tier,
-                gymId: gymId,
-                timestamp: block.timestamp
-            })
-        );
+    function setListingFactor(uint256 _listingFactor) external onlyOwner {
+        // Implementation to set listing factor
     }
 }

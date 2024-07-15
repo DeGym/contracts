@@ -2,46 +2,45 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-
-interface IProviderCertificate {
-    function validateCertificate(uint256 tokenId) external view returns (bool);
-    function getTier(uint256 tokenId) external view returns (uint256);
-}
-
-interface IVoucher {
-    function checkin(
-        uint256 voucherId,
-        uint256 gymId,
-        uint256 dcpUsed
-    ) external;
-}
+import "./GymManager.sol";
+import "./VoucherManager.sol";
+import "./StakeManager.sol";
 
 contract Checkin is Ownable {
-    IProviderCertificate public providerCertificate;
-    IVoucher public voucher;
+    GymManager public gymManager;
+    VoucherManager public voucherManager;
+    StakeManager public stakeManager;
 
-    event CheckinSuccessful(
-        uint256 voucherId,
-        uint256 certificateId,
-        uint256 tier
-    );
+    event CheckinSuccessful(uint256 voucherId, uint256 gymId, uint256 tier);
 
-    constructor(address providerCertificateAddress, address voucherAddress) {
-        providerCertificate = IProviderCertificate(providerCertificateAddress);
-        voucher = IVoucher(voucherAddress);
+    constructor(
+        address gymManagerAddress,
+        address voucherManagerAddress,
+        address stakeManagerAddress
+    ) {
+        gymManager = GymManager(gymManagerAddress);
+        voucherManager = VoucherManager(voucherManagerAddress);
+        stakeManager = StakeManager(stakeManagerAddress);
     }
 
-    function checkin(
-        uint256 voucherId,
-        uint256 certificateId,
-        uint256 dcpUsed
-    ) public {
+    function checkin(uint256 voucherId, uint256 gymId, uint256 dcpUsed) public {
+        VoucherManager.VoucherDetails memory voucher = voucherManager
+            .getVoucherDetails(voucherId);
+        GymManager.GymDetails memory gym = gymManager.getGymDetails(gymId);
+
+        require(voucher.tier >= gym.tier, "Voucher tier too low");
         require(
-            providerCertificate.validateCertificate(certificateId),
-            "Provider certificate is not active"
+            gym.acceptsFiatToken(voucherManager.fiatToken()),
+            "Gym does not accept voucher fiat token"
         );
-        uint256 tier = providerCertificate.getTier(certificateId);
-        voucher.checkin(voucherId, tier, dcpUsed);
-        emit CheckinSuccessful(voucherId, certificateId, tier);
+        require(
+            stakeManager.validateGymEligibility(gymId),
+            "Gym not eligible for listing"
+        );
+
+        voucherManager.checkin(voucherId, gymId, dcpUsed);
+        gymManager.recordCheckin(gymId);
+
+        emit CheckinSuccessful(voucherId, gymId, voucher.tier);
     }
 }
