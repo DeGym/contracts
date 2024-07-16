@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeManager.sol";
 
-contract Treasure is Ownable {
+contract Treasury is Ownable {
     IERC20 public daoToken;
     StakeManager public stakeManager;
     uint256 public decayConstant;

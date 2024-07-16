@@ -5,13 +5,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./VoucherManager.sol";
 import "./GymManager.sol";
 import "./StakeManager.sol";
-import "./Treasure.sol";
+import "./Treasury.sol";
 
 contract Governance is Ownable {
     VoucherManager public voucherManager;
     GymManager public gymManager;
     StakeManager public stakeManager;
-    Treasure public treasure;
+    Treasury public treasury;
 
     event BasePriceChanged(uint256 newBasePrice);
     event ListingFactorChanged(uint256 newListingFactor);
@@ -20,7 +20,7 @@ contract Governance is Ownable {
         address voucherManager,
         uint256 newBasePrice
     );
-    event TreasureInflationParamsChanged(
+    event TreasuryInflationParamsChanged(
         uint256 newDecayConstant,
         uint256 newMaxSupply
     );
@@ -29,12 +29,12 @@ contract Governance is Ownable {
         address _voucherManager,
         address _gymManager,
         address _stakeManager,
-        address _treasure
+        address _treasury
     ) {
         voucherManager = VoucherManager(_voucherManager);
         gymManager = GymManager(_gymManager);
         stakeManager = StakeManager(_stakeManager);
-        treasure = Treasure(_treasure);
+        treasury = Treasury(_treasury);
     }
 
     function changeBasePrice(uint256 newBasePrice) external onlyOwner {
@@ -50,7 +50,7 @@ contract Governance is Ownable {
 
     function changeDecayConstant(uint256 newDecayConstant) external onlyOwner {
         stakeManager.setDecayConstant(newDecayConstant);
-        treasure.setDecayConstant(newDecayConstant);
+        treasury.setDecayConstant(newDecayConstant);
         emit DecayConstantChanged(newDecayConstant);
     }
 
@@ -65,12 +65,12 @@ contract Governance is Ownable {
         );
     }
 
-    function changeTreasureInflationParams(
+    function changeTreasuryInflationParams(
         uint256 newDecayConstant,
         uint256 newMaxSupply
     ) external onlyOwner {
-        treasure.setDecayConstant(newDecayConstant);
-        treasure.setMaxSupply(newMaxSupply);
-        emit TreasureInflationParamsChanged(newDecayConstant, newMaxSupply);
+        treasury.setDecayConstant(newDecayConstant);
+        treasury.setMaxSupply(newMaxSupply);
+        emit TreasuryInflationParamsChanged(newDecayConstant, newMaxSupply);
     }
 }

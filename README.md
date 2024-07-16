@@ -4,11 +4,13 @@ This repository contains the smart contracts for the DeGym project. The project 
 
 ## Contracts
 
-- `DeGymToken`: ERC20 token for DeGym
-- `GymVoucher`: NFT for gym memberships
-- `GymProviderCertificate`: Certificates for gym providers
-- `Checkin`: Contract to handle gym check-ins
-- `Stake`: Staking contract for $DGYM tokens
+- `Token`: Manages the issuance and transfer of DGYM tokens.
+- `VoucherManager`: Manages the issuance and management of vouchers (NFTs).
+- `GymManager`: Manages gym catalog, CRUD operations for gyms, and validates gym stakes based on counterpart stakes.
+- `Checkin`: Manages the check-in process using vouchers and triggers payment.
+- `StakeManager`: Manages the deployment of user-specific stake pools and staking parameters.
+- `StakePool`: Manages the staking and reward distribution for a specific user.
+- `Treasure`: Manages the staking and reward distribution for a specific user. Manages the issuance of DGYM tokens.
 
 ## Setup
 

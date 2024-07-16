@@ -13,6 +13,8 @@ This system consists of six primary smart contracts that handle the management o
 - **Key Functions**:
   - `transfer`: Transfers DGYM tokens from one account to another.
   - `balanceOf`: Retrieves the balance of DGYM tokens for a specific account.
+- **Key Events**:
+  - `Transfer`: Emitted when tokens are transferred from one account to another.
 
 ### VoucherManager.sol
 - **Purpose**: Manages the issuance and management of vouchers (NFTs).
@@ -24,6 +26,11 @@ This system consists of six primary smart contracts that handle the management o
   - `getVoucherDetails`: Retrieves details of a specific voucher.
   - `setBasePrice`: Sets the base price for vouchers.
   - `setListingFactor`: Sets the listing factor for gyms.
+- **Key Events**:
+  - `VoucherPurchased`: Emitted when a voucher is purchased.
+  - `VoucherUpgraded`: Emitted when a voucher is upgraded.
+  - `VoucherRenewed`: Emitted when a voucher is renewed.
+  - `VoucherDowngraded`: Emitted when a voucher is downgraded.
 
 ### Checkin.sol
 - **Purpose**: Manages the check-in process using vouchers and triggers payment.
@@ -32,6 +39,8 @@ This system consists of six primary smart contracts that handle the management o
   - Validates if the tier of the voucher matches with the tier of the gym.
   - Ensures that the gym accepts the fiatToken of the given voucher.
   - Checks the eligibility of the gym based on the staked amount.
+- **Key Events**:
+  - `CheckinSuccessful`: Emitted when a check-in is successful.
 
 ### GymManager.sol
 - **Purpose**: Manages gym catalog, CRUD operations for gyms, and validates gym stakes based on counterpart stakes.
@@ -43,17 +52,26 @@ This system consists of six primary smart contracts that handle the management o
   - Validates gym registration based on the owner's staked DGYM amount (base_price * 50 per gym listed).
   - `listGym`: Lists a gym with a specific tier and staked amount.
   - `setRegisteringFactor`: Sets the listing factor for gyms.
+- **Key Events**:
+  - `GymAdded`: Emitted when a new gym is added.
+  - `GymUpdated`: Emitted when a gym is updated.
+  - `GymRemoved`: Emitted when a gym is removed.
 
 ### StakeManager.sol
 - **Purpose**: Manages the deployment of user-specific stake pools and staking parameters.
 - **Key Functions**:
-  - `deployUserStakePool`: Deploys a user-specific stake pool contract.
-  - `getUserStakePool`: Retrieves the address of a user-specific stake pool.
+  - `deployStakePool`: Deploys a user-specific stake pool contract.
+  - `getStakePool`: Retrieves the address of a user-specific stake pool.
   - `distributeRewards`: Distributes rewards based on calculated inflation.
   - `distributeFiatRewards`: Distributes fiat token rewards based on the total staked amount.
   - `claimFiatRewards`: Allows users to claim their fiat token rewards.
+- **Key Events**:
+  - `StakePoolDeployed`: Emitted when a user-specific stake pool is deployed.
+  - `RewardsDistributed`: Emitted when rewards are distributed.
+  - ``: Emitted when fiat rewards are distributed.
+  - `FiatRewardsDistributed`: Emitted when fiat rewards are distributed.
 
-### UserStakePool.sol
+### StakePool.sol
 - **Purpose**: Manages the staking and reward distribution for a specific user.
 - **Key Functions**:
   - `stake`: Allows the user to stake DGYM tokens with a specified lock duration and compound setting.
@@ -62,14 +80,23 @@ This system consists of six primary smart contracts that handle the management o
   - `claimDGYMRewards`: Allows the user to claim their DGYM rewards.
   - `calculateTotalStakedDuration`: Calculates the total weighted duration of staked tokens.
   - `calculateRewards`: Calculates the rewards based on the staked amount and lock duration.
+- **Key Events**:
+  - `Staked`: Emitted when DGYM tokens are staked.
+  - `Unstaked`: Emitted when DGYM tokens are unstaked.
+  - `RewardsReceived`: Emitted when rewards are received.
+  - `DGYMRewardsClaimed`: Emitted when DGYM rewards are claimed.
 
-### Treasure.sol
+### Treasury.sol
 - **Purpose**: Manages the distribution of multiple fiat tokens and DGYM inflation.
 - **Key Functions**:
   - `addFiatToken`: Adds a new fiat token to the treasury.
   - `depositFiatRewards`: Deposits fiat token rewards into the treasury.
   - `distributeRewards`: Distributes DGYM and fiat token rewards to user stake pools.
   - `setDecayConstant`: Sets the decay constant for inflation calculation.
+- **Key Events**:
+  - `FiatTokenAdded`: Emitted when a new fiat token is added to the treasury.
+  - `FiatRewardsDeposited`: Emitted when fiat rewards are deposited into the treasury.
+  - `RewardsDistributed`: Emitted when rewards are distributed to user stake pools.
 
 ### Governance.sol
 - **Purpose**: Manages governance over base prices, listing factors, and staking parameters.
@@ -79,8 +106,12 @@ This system consists of six primary smart contracts that handle the management o
   - `changeDecayConstant`: Allows changing the decay constant for staking.
   - `changeVoucherManagerBasePrice`: Allows changing the base price for specific voucher managers (e.g., USDT).
   - `changeTreasureInflationParams`: Allows changing the inflation parameters and constants for the Treasure contract.
-
-
+- **Key Events**:
+  - `BasePriceChanged`: Emitted when the base price for vouchers or gym listings is changed.
+  - `ListingFactorChanged`: Emitted when the listing factor for gyms is changed.
+  - `DecayConstantChanged`: Emitted when the decay constant for staking is changed.
+  - `VoucherManagerBasePriceChanged`: Emitted when the base price for specific voucher managers is changed.
+  - `TreasureInflationParamsChanged`: Emitted when the inflation parameters and constants for the Treasure contract are changed.
 
 ## Inflation Mechanism
 

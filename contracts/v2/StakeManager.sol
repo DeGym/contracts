@@ -6,31 +6,31 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract StakeManager is Ownable {
     IERC20 public daoToken;
-    mapping(address => address) public userStakePools;
+    mapping(address => address) public stakePools;
     address[] public supportedFiatTokens;
 
-    event UserStakePoolDeployed(address indexed user, address stakePool);
+    event StakePoolDeployed(address indexed user, address stakePool);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
     }
 
-    function deployUserStakePool(address fiatToken) external {
+    function deployStakePool(address fiatToken) external {
         require(
-            userStakePools[msg.sender] == address(0),
-            "User stake pool already exists"
+            stakePools[msg.sender] == address(0),
+            "Stake pool already exists"
         );
-        UserStakePool stakePool = new UserStakePool(
+        StakePool stakePool = new StakePool(
             address(daoToken),
             fiatToken,
             msg.sender
         );
-        userStakePools[msg.sender] = address(stakePool);
-        emit UserStakePoolDeployed(msg.sender, address(stakePool));
+        stakePools[msg.sender] = address(stakePool);
+        emit StakePoolDeployed(msg.sender, address(stakePool));
     }
 
-    function getUserStakePool(address user) external view returns (address) {
-        return userStakePools[user];
+    function getStakePool(address user) external view returns (address) {
+        return stakePools[user];
     }
 
     function distributeRewards(uint256 totalRewards) external onlyOwner {
@@ -40,11 +40,11 @@ contract StakeManager is Ownable {
             address fiatToken = supportedFiatTokens[i];
             uint256 totalFiatRewards = totalRewards * IERC20(fiatToken).balanceOf(address(this)) / totalStaked;
 
-            for (uint256 j = 0; j < userStakePools.length; j++) {
-                address user = userStakePools[j];
-                uint256 userStake = UserStakePool(userStakePools[user]).totalStaked();
-                uint256 reward = (userStake * totalFiatRewards) / totalStaked;
-                UserStakePool(userStakePools[user]).receiveRewards(fiatToken, reward);
+            for (uint256 j = 0; j < stakePools.length; j++) {
+                address user = stakePools[j];
+                uint256 stake = StakePool(stakePools[user]).totalStaked();
+                uint256 reward = (stake * totalFiatRewards) / totalStaked;
+                StakePool(stakePools[user]).receiveRewards(fiatToken, reward);
             }
         }
 }
@@ -52,15 +52,15 @@ contract StakeManager is Ownable {
 
     function distributeFiatRewards(uint256 totalRewards, address fiatToken) external onlyOwner {
         uint256 totalStaked = getTotalStaked();
-        for (address user : userStakePools) {
-            uint256 userStake = UserStakePool(userStakePools[user]).totalStaked();
-            uint256 reward = (userStake * totalRewards) / totalStaked;
-            UserStakePool(userStakePools[user]).receiveFiatRewards(reward, fiatToken);
+        for (address user : stakePools) {
+            uint256 stake = StakePool(stakePools[user]).totalStaked();
+            uint256 reward = (stake * totalRewards) / totalStaked;
+            StakePool(stakePools[user]).receiveFiatRewards(reward, fiatToken);
         }
     }
 
     function claimFiatRewards(address fiatToken) external {
-        UserStakePool userPool = UserStakePool(userStakePools[msg.sender]);
+        StakePool userPool = StakePool(stakePools[msg.sender]);
         userPool.claimFiatRewards(fiatToken);
     }
 
@@ -70,14 +70,14 @@ contract StakeManager is Ownable {
 
     function getTotalStaked() internal view returns (uint256) {
         uint256 totalStaked = 0;
-        for (address user : userStakePools) {
-            totalStaked += UserStakePool(userStakePools[user]).totalStaked();
+        for (address user : stakePools) {
+            totalStaked += StakePool(stakePools[user]).totalStaked();
         }
         return totalStaked;
     }
 }
 
-contract UserStakePool is Ownable {
+contract StakePool is Ownable {
     IERC20 public daoToken;
     IERC20 public fiatToken;
 
@@ -135,12 +135,12 @@ contract UserStakePool is Ownable {
 
     function unstake(uint256 stakeIndex) external onlyOwner {
         require(stakes.length > stakeIndex, "Invalid stake index");
-        StakeInfo storage userStake = stakes[stakeIndex];
+        StakeInfo storage stake = stakes[stakeIndex];
         require(
-            block.timestamp >= userStake.startTime + userStake.lockDuration,
+            block.timestamp >= stake.startTime + stake.lockDuration,
             "Stake is still locked"
         );
-        uint256 amount = userStake.amount;
+        uint256 amount = stake.amount;
 
         // Remove stake from array
         stakes[stakeIndex] = stakes[stakes.length - 1];
@@ -185,9 +185,9 @@ contract UserStakePool is Ownable {
         uint256 totalAmount = 0;
 
         for (uint256 i = 0; i < stakes.length; i++) {
-            StakeInfo storage userStake = stakes[i];
-            totalWeightedDuration += userStake.amount * userStake.lockDuration;
-            totalAmount += userStake.amount;
+            StakeInfo storage stake = stakes[i];
+            totalWeightedDuration += stake.amount * stake.lockDuration;
+            totalAmount += stake.amount;
         }
 
         if (totalAmount == 0) {
@@ -202,8 +202,8 @@ contract UserStakePool is Ownable {
         uint256 totalWeightedDuration = calculateTotalStakedDuration();
 
         for (uint256 i = 0; i < stakes.length; i++) {
-            StakeInfo storage userStake = stakes[i];
-            uint256 weight = (userStake.amount * userStake.lockDuration) / totalWeightedDuration;
+            StakeInfo storage stake = stakes[i];
+            uint256 weight = (stake.amount * stake.lockDuration) / totalWeightedDuration;
             totalRewards += weight; // Placeholder calculation
         }
 
