@@ -1,34 +1,22 @@
 import pytest
 
 
-def test_checkin(
-    checkin_contract, gym_manager_contract, voucher_manager_contract, provider, consumer
-):
-    consumer = consumer.address if type(consumer) != str else consumer
-    provider = provider.address if type(provider) != str else provider
-    voucher_manager_contract.createVoucher(
-        consumer, 1, 30, "UTC", sender=provider
-    ).wait()
-    gym_manager_contract.addGym(
-        provider, 1, "Geolocation", "metadata", ["USDT"], sender=provider
-    ).wait()
-    voucher_manager_contract.approve(checkin_contract.address, 0, sender=consumer)
-    tx = checkin_contract.checkin(0, 1, 1, sender=consumer)
+def test_checkin(checkin, gym_manager, voucher_manager, gym, costumer):
+    costumer = costumer.address if type(costumer) != str else costumer
+    gym = gym.address if type(gym) != str else gym
+    voucher_manager.createVoucher(costumer, 1, 30, "UTC", sender=gym).wait()
+    gym_manager.addGym(gym, 1, "Geolocation", "metadata", ["USDT"], sender=gym).wait()
+    voucher_manager.approve(checkin.address, 0, sender=costumer)
+    tx = checkin.checkin(0, 1, 1, sender=costumer)
     tx.wait()
-    assert checkin_contract.getCheckinStatus(consumer, 1)
+    assert checkin.getCheckinStatus(costumer, 1)
 
 
-def test_invalid_checkin(
-    checkin_contract, gym_manager_contract, voucher_manager_contract, provider, consumer
-):
-    consumer = consumer.address if type(consumer) != str else consumer
-    provider = provider.address if type(provider) != str else provider
-    voucher_manager_contract.createVoucher(
-        consumer, 1, 30, "UTC", sender=provider
-    ).wait()
-    gym_manager_contract.addGym(
-        provider, 2, "Geolocation", "metadata", ["USDT"], sender=provider
-    ).wait()
-    voucher_manager_contract.approve(checkin_contract.address, 0, sender=consumer)
+def test_invalid_checkin(checkin, gym_manager, voucher_manager, gym, costumer):
+    costumer = costumer.address if type(costumer) != str else costumer
+    gym = gym.address if type(gym) != str else gym
+    voucher_manager.createVoucher(costumer, 1, 30, "UTC", sender=gym).wait()
+    gym_manager.addGym(gym, 2, "Geolocation", "metadata", ["USDT"], sender=gym).wait()
+    voucher_manager.approve(checkin.address, 0, sender=costumer)
     with pytest.raises(Exception):
-        checkin_contract.checkin(0, 1, 1, sender=consumer)
+        checkin.checkin(0, 1, 1, sender=costumer)

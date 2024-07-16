@@ -2,7 +2,7 @@ import pytest, os
 from ape import project, accounts
 
 
-def __get_contract(Contract, key, deployer, contract, *args, **kwargs):
+def __get(Contract, key, deployer, contract, *args, **kwargs):
     address = os.environ.get(key)
     contract = (
         Contract[address] if address else deployer.deploy(contract, *args, **kwargs)
@@ -17,30 +17,36 @@ def deployer():
 
 
 @pytest.fixture
-def consumer():
-    address = os.environ.get("CONSUMER_ADDRESS")
+def costumer():
+    address = os.environ.get("COSTUMER_ADDRESS")
     return accounts[address] if address else accounts[1]
 
 
 @pytest.fixture
-def provider():
-    address = os.environ.get("PROVIDER_ADDRESS")
+def stakeholder():
+    address = os.environ.get("STAKEHOLDER_ADDRESS")
+    return accounts[address] if address else accounts[1]
+
+
+@pytest.fixture
+def gym():
+    address = os.environ.get("GYM_ADDRESS")
     return accounts[address] if address else accounts[2]
 
 
 @pytest.fixture
-def dGym_token(Contract, deployer):
-    return __get_contract(Contract, "DGYM_ADDRESS", deployer, project.Token, 1000000)
+def dgym_token(Contract, deployer):
+    return __get(Contract, "DGYM_ADDRESS", deployer, project.Token, 1000000)
 
 
 @pytest.fixture
 def fiat_token(Contract, deployer):
-    return __get_contract(Contract, "USDT_ADDRESS", deployer, project.Token, 1000000)
+    return __get(Contract, "USDT_ADDRESS", deployer, project.Token, 1000000)
 
 
 @pytest.fixture
-def voucher_manager_contract(Contract, deployer, fiat_token):
-    return __get_contract(
+def voucher_manager(Contract, deployer, fiat_token):
+    return __get(
         Contract,
         "VOUCHER_MANAGER_ADDRESS",
         deployer,
@@ -50,75 +56,73 @@ def voucher_manager_contract(Contract, deployer, fiat_token):
 
 
 @pytest.fixture
-def stake_manager_contract(Contract, deployer, dGym_token):
-    return __get_contract(
+def stake_manager(Contract, deployer, dgym_token):
+    return __get(
         Contract,
         "STAKE_MANAGER_ADDRESS",
         deployer,
         project.StakeManager,
-        dGym_token.address,
+        dgym_token.address,
     )
 
 
 @pytest.fixture
-def user_stake_pool_contract(Contract, deployer, dGym_token, fiat_token):
-    return __get_contract(
+def stake_pool(Contract, deployer, dgym_token, fiat_token):
+    return __get(
         Contract,
-        "USER_STAKE_POOL_ADDRESS",
+        "STAKE_POOL_ADDRESS",
         deployer,
         project.UserStakePool,
-        dGym_token.address,
+        dgym_token.address,
         fiat_token.address,
     )
 
 
 @pytest.fixture
-def gym_manager_contract(Contract, deployer, stake_manager_contract):
-    return __get_contract(
+def gym_manager(Contract, deployer, stake_manager):
+    return __get(
         Contract,
         "GYM_MANAGER_ADDRESS",
         deployer,
         project.GymManager,
-        stake_manager_contract.address,
+        stake_manager.address,
         1000,
     )
 
 
 @pytest.fixture
-def checkin_contract(
-    Contract, deployer, gym_manager_contract, voucher_manager_contract
-):
-    return __get_contract(
+def checkin(Contract, deployer, gym_manager, voucher_manager):
+    return __get(
         Contract,
         "CHECKIN_ADDRESS",
         deployer,
         project.Checkin,
-        gym_manager_contract.address,
-        voucher_manager_contract.address,
+        gym_manager.address,
+        voucher_manager.address,
     )
 
 
 @pytest.fixture
-def treasury_contract(Contract, deployer):
-    return __get_contract(Contract, "TREASURY_ADDRESS", deployer, project.Treasury)
+def treasury(Contract, deployer):
+    return __get(Contract, "TREASURY_ADDRESS", deployer, project.Treasury)
 
 
 @pytest.fixture
-def governance_contract(
+def governance(
     Contract,
     deployer,
-    treasury_contract,
-    voucher_manager_contract,
-    gym_manager_contract,
-    stake_manager_contract,
+    treasury,
+    voucher_manager,
+    gym_manager,
+    stake_manager,
 ):
-    return __get_contract(
+    return __get(
         Contract,
         "GOVERNANCE_ADDRESS",
         deployer,
         project.Governance,
-        treasury_contract.address,
-        voucher_manager_contract.address,
-        gym_manager_contract.address,
-        stake_manager_contract.address,
+        treasury.address,
+        voucher_manager.address,
+        gym_manager.address,
+        stake_manager.address,
     )

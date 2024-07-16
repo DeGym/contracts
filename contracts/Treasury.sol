@@ -55,14 +55,14 @@ contract Treasury is Ownable {
             totalFiatRewards += fiatTokenRewards[fiatToken];
         }
 
-        for (address user : stakeManager.userStakePools()) {
-            uint256 userStake = stakeManager.getUserStake(user);
-            uint256 daoReward = (userStake / totalStaked) * daoRewards;
-            UserStakePool(stakeManager.getUserStakePool(user)).receiveRewards(daoReward);
+        for (address stakeholder : stakeManager.stakePools()) {
+            uint256 stakeholderStake = stakeManager.getUserStake(stakeholder);
+            uint256 daoReward = (stakeholderStake / totalStaked) * daoRewards;
+            UserStakePool(stakeManager.getUserStakePool(stakeholder)).receiveRewards(daoReward);
 
             for (address fiatToken : supportedFiatTokens) {
-                uint256 fiatReward = (userStake / totalStaked) * fiatTokenRewards[fiatToken];
-                stakeManager.addFiatReward(user, fiatToken, fiatReward);
+                uint256 fiatReward = (stakeholderStake / totalStaked) * fiatTokenRewards[fiatToken];
+                stakeManager.addFiatReward(stakeholder, fiatToken, fiatReward);
                 fiatTokenRewards[fiatToken] -= fiatReward;
             }
         }

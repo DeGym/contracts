@@ -9,7 +9,7 @@ contract StakeManager is Ownable {
     mapping(address => address) public stakePools;
     address[] public supportedFiatTokens;
 
-    event StakePoolDeployed(address indexed user, address stakePool);
+    event StakePoolDeployed(address indexed stakeholder, address stakePool);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -29,8 +29,8 @@ contract StakeManager is Ownable {
         emit StakePoolDeployed(msg.sender, address(stakePool));
     }
 
-    function getStakePool(address user) external view returns (address) {
-        return stakePools[user];
+    function getStakePool(address stakeholder) external view returns (address) {
+        return stakePools[stakeholder];
     }
 
     function distributeRewards(uint256 totalRewards) external onlyOwner {
@@ -41,27 +41,26 @@ contract StakeManager is Ownable {
             uint256 totalFiatRewards = totalRewards * IERC20(fiatToken).balanceOf(address(this)) / totalStaked;
 
             for (uint256 j = 0; j < stakePools.length; j++) {
-                address user = stakePools[j];
-                uint256 stake = StakePool(stakePools[user]).totalStaked();
+                address stakeholder = stakePools[j];
+                uint256 stake = StakePool(stakePools[stakeholder]).totalStaked();
                 uint256 reward = (stake * totalFiatRewards) / totalStaked;
-                StakePool(stakePools[user]).receiveRewards(fiatToken, reward);
+                StakePool(stakePools[stakeholder]).receiveRewards(fiatToken, reward);
             }
         }
-}
-
+    }
 
     function distributeFiatRewards(uint256 totalRewards, address fiatToken) external onlyOwner {
         uint256 totalStaked = getTotalStaked();
-        for (address user : stakePools) {
-            uint256 stake = StakePool(stakePools[user]).totalStaked();
+        for (address stakeholder : stakePools) {
+            uint256 stake = StakePool(stakePools[stakeholder]).totalStaked();
             uint256 reward = (stake * totalRewards) / totalStaked;
-            StakePool(stakePools[user]).receiveFiatRewards(reward, fiatToken);
+            StakePool(stakePools[stakeholder]).receiveFiatRewards(reward, fiatToken);
         }
     }
 
     function claimFiatRewards(address fiatToken) external {
-        StakePool userPool = StakePool(stakePools[msg.sender]);
-        userPool.claimFiatRewards(fiatToken);
+        StakePool stakeholderPool = StakePool(stakePools[msg.sender]);
+        stakeholderPool.claimFiatRewards(fiatToken);
     }
 
     function addSupportedFiatToken(address fiatToken) external onlyOwner {
@@ -70,8 +69,8 @@ contract StakeManager is Ownable {
 
     function getTotalStaked() internal view returns (uint256) {
         uint256 totalStaked = 0;
-        for (address user : stakePools) {
-            totalStaked += StakePool(stakePools[user]).totalStaked();
+        for (address stakeholder : stakePools) {
+            totalStaked += StakePool(stakePools[stakeholder]).totalStaked();
         }
         return totalStaked;
     }
@@ -97,18 +96,18 @@ contract StakePool is Ownable {
     mapping(address => uint256) public dGYMRewards;
 
     event Staked(
-        address indexed user,
+        address indexed stakeholder,
         uint256 amount,
         uint256 lockDuration,
         bool isCompound
     );
-    event Unstaked(address indexed user, uint256 amount);
+    event Unstaked(address indexed stakeholder, uint256 amount);
     event RewardDistributed(
-        address indexed user,
+        address indexed stakeholder,
         uint256 amount,
         bool isCompound
     );
-    event FiatRewardDistributed(address indexed user, uint256 amount);
+    event FiatRewardDistributed(address indexed stakeholder, uint256 amount);
 
     constructor(address _daoToken, address _fiatToken, address owner) {
         daoToken = IERC20(_daoToken);
