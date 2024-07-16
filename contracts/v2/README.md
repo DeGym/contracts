@@ -105,13 +105,13 @@ This system consists of six primary smart contracts that handle the management o
   - `changeListingFactor`: Allows changing the listing factor for gyms.
   - `changeDecayConstant`: Allows changing the decay constant for staking.
   - `changeVoucherManagerBasePrice`: Allows changing the base price for specific voucher managers (e.g., USDT).
-  - `changeTreasureInflationParams`: Allows changing the inflation parameters and constants for the Treasure contract.
+  - `changeTreasuryInflationParams`: Allows changing the inflation parameters and constants for the Treasury contract.
 - **Key Events**:
   - `BasePriceChanged`: Emitted when the base price for vouchers or gym listings is changed.
   - `ListingFactorChanged`: Emitted when the listing factor for gyms is changed.
   - `DecayConstantChanged`: Emitted when the decay constant for staking is changed.
   - `VoucherManagerBasePriceChanged`: Emitted when the base price for specific voucher managers is changed.
-  - `TreasureInflationParamsChanged`: Emitted when the inflation parameters and constants for the Treasure contract are changed.
+  - `TreasuryInflationParamsChanged`: Emitted when the inflation parameters and constants for the Treasury contract are changed.
 
 ## Inflation Mechanism
 
@@ -174,14 +174,14 @@ classDiagram
     +changeListingFactor()
     +changeDecayConstant()
     +changeVoucherManagerBasePrice()
-    +changeTreasureInflationParams()
+    +changeTreasuryInflationParams()
   }
   class StakeManager {
-    +deployUserStakePool()
-    +getUserStakePool()
+    +deployStakePool()
+    +getStakePool()
     +distributeRewards()
   }
-  class UserStakePool {
+  class StakePool {
     +stake()
     +unstake()
     +receiveRewards()
@@ -192,21 +192,21 @@ classDiagram
     +calculateTotalStakedDuration()
     +calculateRewards()
   }
-  class Treasure {
+  class Treasury {
     +calculateInflation()
     +distributeRewards()
   }
 
-  Token <|-- UserStakePool
+  Token <|-- StakePool
   FiatToken <|-- VoucherManager
   Token <|-- GymManager
   VoucherManager <|-- Checkin
   GymManager <|-- Checkin
   VoucherManager <|-- Governance
   GymManager <|-- Governance
-  StakeManager <|-- UserStakePool
+  StakeManager <|-- StakePool
   Governance <|-- StakeManager
-  StakeManager <|-- Treasure
-  UserStakePool <|-- Treasure
+  StakeManager <|-- Treasury
+  StakePool <|-- Treasury
 
 ```

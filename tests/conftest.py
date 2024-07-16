@@ -39,43 +39,86 @@ def fiat_token(Contract, deployer):
 
 
 @pytest.fixture
-def voucher_contract(Contract, deployer, fiat_token):
+def voucher_manager_contract(Contract, deployer, fiat_token):
     return __get_contract(
-        Contract, "VOUCHER_ADDRESS", deployer, project.Voucher, fiat_token
+        Contract,
+        "VOUCHER_MANAGER_ADDRESS",
+        deployer,
+        project.VoucherManager,
+        fiat_token.address,
     )
 
 
 @pytest.fixture
-def stake_contract(Contract, deployer, dGym_token, fiat_token):
+def stake_manager_contract(Contract, deployer, dGym_token):
     return __get_contract(
         Contract,
-        "STAKE_ADDRESS",
+        "STAKE_MANAGER_ADDRESS",
         deployer,
-        project.Stake,
+        project.StakeManager,
+        dGym_token.address,
+    )
+
+
+@pytest.fixture
+def user_stake_pool_contract(Contract, deployer, dGym_token, fiat_token):
+    return __get_contract(
+        Contract,
+        "USER_STAKE_POOL_ADDRESS",
+        deployer,
+        project.UserStakePool,
         dGym_token.address,
         fiat_token.address,
     )
 
 
 @pytest.fixture
-def gym_provider_certificate(Contract, deployer, stake_contract):
+def gym_manager_contract(Contract, deployer, stake_manager_contract):
     return __get_contract(
         Contract,
-        "PROVIDER_CERTIFICATE_ADDRESS",
+        "GYM_MANAGER_ADDRESS",
         deployer,
-        project.ProviderCertificate,
-        stake_contract.address,
+        project.GymManager,
+        stake_manager_contract.address,
         1000,
     )
 
 
 @pytest.fixture
-def checkin_contract(Contract, deployer, gym_provider_certificate, voucher_contract):
+def checkin_contract(
+    Contract, deployer, gym_manager_contract, voucher_manager_contract
+):
     return __get_contract(
         Contract,
         "CHECKIN_ADDRESS",
         deployer,
         project.Checkin,
-        gym_provider_certificate.address,
-        voucher_contract.address,
+        gym_manager_contract.address,
+        voucher_manager_contract.address,
+    )
+
+
+@pytest.fixture
+def treasury_contract(Contract, deployer):
+    return __get_contract(Contract, "TREASURY_ADDRESS", deployer, project.Treasury)
+
+
+@pytest.fixture
+def governance_contract(
+    Contract,
+    deployer,
+    treasury_contract,
+    voucher_manager_contract,
+    gym_manager_contract,
+    stake_manager_contract,
+):
+    return __get_contract(
+        Contract,
+        "GOVERNANCE_ADDRESS",
+        deployer,
+        project.Governance,
+        treasury_contract.address,
+        voucher_manager_contract.address,
+        gym_manager_contract.address,
+        stake_manager_contract.address,
     )
