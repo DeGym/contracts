@@ -36,6 +36,7 @@ contract StakePool is Ownable {
         transferOwnership(owner);
         stakeManager = _stakeManager;
     }
+
     modifier onlyStakeManager() {
         require(
             msg.sender == stakeManager,
@@ -117,9 +118,14 @@ contract StakePool is Ownable {
         emit LockDurationExtended(msg.sender, stake.lockDuration);
     }
 
-    function updateReward(uint256 rewardAmount) external onlyStakeManager {
+    function updateReward(
+        uint256 daoRewards,
+        uint256 totalStakedAmount
+    ) external onlyStakeManager returns (uint256) {
+        uint256 rewardAmount = (totalStaked * daoRewards) / totalStakedAmount;
         rewards += rewardAmount;
         emit RewardUpdated(owner(), rewardAmount);
+        return rewardAmount;
     }
 
     function claimRewards() external onlyOwner {

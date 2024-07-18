@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakePool.sol";
+import "./Token.sol";
 
 contract StakeManager is Ownable {
     IERC20 public daoToken;
@@ -13,7 +14,7 @@ contract StakeManager is Ownable {
 
     event StakePoolDeployed(address indexed stakeholder, address stakePool);
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
-    event RewardsUpdated(address indexed stakeholder, uint256 rewardAmount);
+    event RewardsUpdated(uint256 totalUnclaimedRewards);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -33,22 +34,22 @@ contract StakeManager is Ownable {
         stakeholders.push(msg.sender);
         emit StakePoolDeployed(msg.sender, address(stakePool));
     }
+
     function getStakePool(address stakeholder) external view returns (address) {
         return stakePools[stakeholder];
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
         uint256 totalStakedAmount = totalStaked;
+        uint256 totalRewardAmount = 0;
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
-            uint256 stakeholderStake = StakePool(stakePools[stakeholder])
-                .totalStaked();
-            uint256 rewardAmount = (stakeholderStake * daoRewards) /
-                totalStakedAmount;
-            StakePool(stakePools[stakeholder]).updateReward(rewardAmount);
-            totalUnclaimedRewards += rewardAmount;
-            emit RewardsUpdated(stakeholder, rewardAmount);
+            uint256 rewardAmount = StakePool(stakePools[stakeholder])
+                .updateReward(daoRewards, totalStakedAmount);
+            totalRewardAmount += rewardAmount;
         }
+        totalUnclaimedRewards += totalRewardAmount;
+        emit RewardsUpdated(totalUnclaimedRewards);
     }
 
     function updateTotalStaked(uint256 amount, bool isStaking) external {
