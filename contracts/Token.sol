@@ -19,4 +19,11 @@ contract Token is ERC20, Ownable {
         _mint(to, amount);
         currentSupply += amount;
     }
+    function setMaxSupply(uint256 newMaxSupply) external onlyOwner {
+        require(
+            newMaxSupply >= totalSupply(),
+            "New max supply must be greater than or equal to current supply"
+        );
+        maxSupply = newMaxSupply;
+    }
 }

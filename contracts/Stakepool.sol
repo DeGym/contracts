@@ -30,6 +30,11 @@ contract StakePool is Ownable {
         stakeManager = _stakeManager;
     }
 
+    modifier onlyStakeManager() {
+        require(msg.sender == stakeManager, "Only stake manager can perform this action");
+        _;
+    }
+
     function stake(uint256 amount, uint256 lockDuration, bool isCompound) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         require(lockDuration > 0, "Lock duration must be greater than 0");
@@ -59,8 +64,7 @@ contract StakePool is Ownable {
         emit Unstaked(msg.sender, amount);
     }
 
-    function updateReward(uint256 rewardAmount) external {
-        require(msg.sender == stakeManager, "Only stake manager can update rewards");
+    function updateReward(uint256 rewardAmount) external onlyStakeManager {
         rewards += rewardAmount;
         emit RewardUpdated(owner(), rewardAmount);
     }
@@ -72,5 +76,36 @@ contract StakePool is Ownable {
         StakeManager(stakeManager).updateUnclaimedRewards(claimableRewards, true);
         daoToken.mint(msg.sender, claimableRewards);
         emit RewardClaimed(msg.sender, claimableRewards);
+    }
+
+    function calculateTotalStakedDuration() public view returns (uint256) {
+        uint256 totalWeightedDuration = 0;
+        uint256 totalAmount = 0;
+
+        for (uint256 i = 0; i < stakes.length; i++) {
+            StakeInfo storage stake = stakes[i];
+            totalWeightedDuration += stake.amount * stake.lockDuration;
+            totalAmount += stake.amount;
+        }
+
+        if (totalAmount == 0) {
+            return 0;
+        }
+
+        return totalWeightedDuration / totalAmount;
+    }
+
+    function calculateRewards() public view returns (uint256) {
+        uint256 totalRewards = 0;
+        uint256 totalWeightedDuration = calculateTotalStakedDuration();
+
+        for (uint256 i = 0; i < stakes.length; i++) {
+            StakeInfo storage stake = stakes[i];
+            uint256 weight = (stake.amount * stake.lockDuration) /
+                totalWeightedDuration;
+            totalRewards += weight; // Placeholder calculation
+        }
+
+        return totalRewards;
     }
 }

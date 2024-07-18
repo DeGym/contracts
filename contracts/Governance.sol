@@ -6,41 +6,32 @@ import "./VoucherManager.sol";
 import "./GymManager.sol";
 import "./StakeManager.sol";
 import "./Treasury.sol";
+import "./Token.sol";
 
 contract Governance is Ownable {
-    VoucherManager public voucherManager;
     GymManager public gymManager;
     StakeManager public stakeManager;
     Treasury public treasury;
+    Token public daoToken;
 
-    event BasePriceChanged(uint256 newBasePrice);
     event ListingFactorChanged(uint256 newListingFactor);
     event DecayConstantChanged(uint256 newDecayConstant);
+    event MaxSupplyChanged(uint256 newMaxSupply);
     event VoucherManagerBasePriceChanged(
         address voucherManager,
         uint256 newBasePrice
     );
-    event TreasuryInflationParamsChanged(
-        uint256 newDecayConstant,
-        uint256 newMaxSupply
-    );
 
     constructor(
-        address _voucherManager,
         address _gymManager,
         address _stakeManager,
-        address _treasury
+        address _treasury,
+        address _daoToken
     ) {
-        voucherManager = VoucherManager(_voucherManager);
         gymManager = GymManager(_gymManager);
         stakeManager = StakeManager(_stakeManager);
         treasury = Treasury(_treasury);
-    }
-
-    function changeBasePrice(uint256 newBasePrice) external onlyOwner {
-        voucherManager.setBasePrice(newBasePrice);
-        gymManager.setBasePrice(newBasePrice);
-        emit BasePriceChanged(newBasePrice);
+        daoToken = Token(_daoToken);
     }
 
     function changeListingFactor(uint256 newListingFactor) external onlyOwner {
@@ -53,6 +44,11 @@ contract Governance is Ownable {
         emit DecayConstantChanged(newDecayConstant);
     }
 
+    function changeMaxSupply(uint256 newMaxSupply) external onlyOwner {
+        daoToken.setMaxSupply(newMaxSupply);
+        emit MaxSupplyChanged(newMaxSupply);
+    }
+
     function changeVoucherManagerBasePrice(
         address voucherManagerAddress,
         uint256 newBasePrice
@@ -62,14 +58,5 @@ contract Governance is Ownable {
             voucherManagerAddress,
             newBasePrice
         );
-    }
-
-    function changeTreasuryInflationParams(
-        uint256 newDecayConstant,
-        uint256 newMaxSupply
-    ) external onlyOwner {
-        treasury.setDecayConstant(newDecayConstant);
-        daoToken.setMaxSupply(newMaxSupply);
-        emit TreasuryInflationParamsChanged(newDecayConstant, newMaxSupply);
     }
 }
