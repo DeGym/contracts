@@ -5,9 +5,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakePool.sol";
 
 contract StakeManager is Ownable {
+    IERC20 public daoToken;
     mapping(address => address) public stakePools;
     address[] public stakeholders;
-
     uint256 public totalStaked;
     uint256 public totalUnclaimedRewards;
 
@@ -15,24 +15,29 @@ contract StakeManager is Ownable {
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(address indexed stakeholder, uint256 rewardAmount);
 
-    constructor() {}
+    constructor(address _daoToken) {
+        daoToken = IERC20(_daoToken);
+    }
 
     function deployStakePool() external {
         require(
             stakePools[msg.sender] == address(0),
             "Stake pool already exists"
         );
-        StakePool stakePool = new StakePool(msg.sender, address(this));
+        StakePool stakePool = new StakePool(
+            address(daoToken),
+            msg.sender,
+            address(this)
+        );
         stakePools[msg.sender] = address(stakePool);
         stakeholders.push(msg.sender);
         emit StakePoolDeployed(msg.sender, address(stakePool));
     }
-
     function getStakePool(address stakeholder) external view returns (address) {
         return stakePools[stakeholder];
     }
 
-    function distributeRewards(uint256 daoRewards) external onlyOwner {
+    function updateRewards(uint256 daoRewards) external onlyOwner {
         uint256 totalStakedAmount = totalStaked;
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];

@@ -23,7 +23,7 @@ contract Treasury is Ownable {
 
     function calculateRewards() external onlyOwner {
         uint256 totalStaked = stakeManager.totalStaked();
-        uint256 unclaimedRewards = stakeManager.getTotalUnclaimedRewards();
+        uint256 unclaimedRewards = stakeManager.totalUnclaimedRewards();
         uint256 currentSupply = daoToken.currentSupply();
         uint256 maxSupply = daoToken.maxSupply();
 
