@@ -17,7 +17,7 @@ contract Treasury is Ownable {
 
     event FiatTokenAdded(address fiatToken);
     event FiatRewardsDeposited(address indexed fiatToken, uint256 amount);
-    event RewardsDistributed(uint256 daoRewards, uint256 fiatRewards);
+    event RewardsDistributed(uint256 daoRewards);
 
     constructor(
         address _daoToken,
@@ -50,28 +50,20 @@ contract Treasury is Ownable {
         uint256 daoRewards = calculateInflation();
         currentSupply += daoRewards;
 
-        uint256 totalFiatRewards;
-        for (address fiatToken : supportedFiatTokens) {
-            totalFiatRewards += fiatTokenRewards[fiatToken];
-        }
-
-        for (address stakeholder : stakeManager.stakePools()) {
+        for (uint256 i = 0; i < stakeManager.stakeholders().length; i++) {
+            address stakeholder = stakeManager.stakeholders()[i];
             uint256 stakeholderStake = stakeManager.getUserStake(stakeholder);
-            uint256 daoReward = (stakeholderStake / totalStaked) * daoRewards;
-            UserStakePool(stakeManager.getUserStakePool(stakeholder)).receiveRewards(daoReward);
-
-            for (address fiatToken : supportedFiatTokens) {
-                uint256 fiatReward = (stakeholderStake / totalStaked) * fiatTokenRewards[fiatToken];
-                stakeManager.addFiatReward(stakeholder, fiatToken, fiatReward);
-                fiatTokenRewards[fiatToken] -= fiatReward;
-            }
+            uint256 daoReward = (stakeholderStake * daoRewards) / totalStaked;
+            UserStakePool(stakeManager.getUserStakePool(stakeholder))
+                .receiveRewards(daoReward);
         }
 
-        emit RewardsDistributed(daoRewards, totalFiatRewards);
+        emit RewardsDistributed(daoRewards);
     }
 
     function calculateInflation() public view returns (uint256) {
-        uint256 inflationRate = decayConstant * (maxSupply - currentSupply) / maxSupply;
+        uint256 inflationRate = (decayConstant * (maxSupply - currentSupply)) /
+            maxSupply;
         return currentSupply * inflationRate;
     }
 
