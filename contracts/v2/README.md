@@ -63,13 +63,13 @@ This system consists of six primary smart contracts that handle the management o
   - `deployStakePool`: Deploys a user-specific stake pool contract.
   - `getStakePool`: Retrieves the address of a user-specific stake pool.
   - `distributeRewards`: Distributes rewards based on calculated inflation.
-  - `distributeFiatRewards`: Distributes fiat token rewards based on the total staked amount.
-  - `claimFiatRewards`: Allows users to claim their fiat token rewards.
+  - `addSupportedFiatToken`: Adds a supported fiat token for reward distribution.
+  - `updateTotalStaked`: Updates the total staked amount.
+  - `getTotalLockedDGYM`: Retrieves the total amount of locked DGYM tokens.
+  - `getTotalUnlockedDGYM`: Retrieves the total amount of unlocked DGYM tokens.
 - **Key Events**:
   - `StakePoolDeployed`: Emitted when a user-specific stake pool is deployed.
-  - `RewardsDistributed`: Emitted when rewards are distributed.
-  - ``: Emitted when fiat rewards are distributed.
-  - `FiatRewardsDistributed`: Emitted when fiat rewards are distributed.
+  - `StakeUpdated`: Emitted when the total staked amount is updated.
 
 ### StakePool.sol
 - **Purpose**: Manages the staking and reward distribution for a specific user.
@@ -77,14 +77,16 @@ This system consists of six primary smart contracts that handle the management o
   - `stake`: Allows the user to stake DGYM tokens with a specified lock duration and compound setting.
   - `unstake`: Allows the user to unstake their tokens after the lock duration has passed.
   - `receiveRewards`: Receives rewards from the StakeManager.
-  - `claimDGYMRewards`: Allows the user to claim their DGYM rewards.
+  - `increaseStakeAmount`: Increasese the stake amount.
+  - `extendLockDuration`: Extends the lock duration of an existing stake.
   - `calculateTotalStakedDuration`: Calculates the total weighted duration of staked tokens.
   - `calculateRewards`: Calculates the rewards based on the staked amount and lock duration.
 - **Key Events**:
   - `Staked`: Emitted when DGYM tokens are staked.
   - `Unstaked`: Emitted when DGYM tokens are unstaked.
-  - `RewardsReceived`: Emitted when rewards are received.
-  - `DGYMRewardsClaimed`: Emitted when DGYM rewards are claimed.
+  - `RewardDistributed`: Emitted when rewards are distributed.
+  - `FiatRewardDistributed`: Emitted when fiat rewards are distributed.
+  - `StakeAmountAdded`: Emitted when more DGYM is added to an existing stake.
 
 ### Treasury.sol
 - **Purpose**: Manages the distribution of multiple fiat tokens and DGYM inflation.

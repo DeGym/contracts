@@ -49,7 +49,6 @@ contract Governance is Ownable {
     }
 
     function changeDecayConstant(uint256 newDecayConstant) external onlyOwner {
-        stakeManager.setDecayConstant(newDecayConstant);
         treasury.setDecayConstant(newDecayConstant);
         emit DecayConstantChanged(newDecayConstant);
     }
@@ -70,7 +69,7 @@ contract Governance is Ownable {
         uint256 newMaxSupply
     ) external onlyOwner {
         treasury.setDecayConstant(newDecayConstant);
-        treasury.setMaxSupply(newMaxSupply);
+        daoToken.setMaxSupply(newMaxSupply);
         emit TreasuryInflationParamsChanged(newDecayConstant, newMaxSupply);
     }
 }
