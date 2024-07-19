@@ -19,6 +19,7 @@ contract StakePool is Ownable {
         bool isCompound;
         uint256 reward;
         uint256 weight;
+        uint256 earnings;
     }
 
     StakeInfo[] public stakes;
@@ -63,7 +64,8 @@ contract StakePool is Ownable {
                 lockDuration,
                 isCompound,
                 0,
-                weight
+                weight,
+                0
             )
         );
         totalStaked += amount;
@@ -141,12 +143,14 @@ contract StakePool is Ownable {
                 totalWeightedStake;
             if (stake.isCompound) {
                 stake.amount += stakeWeightedShare;
+                stake.earnings += stakeWeightedShare;
                 StakeManager(stakeManager).updateTotalStaked(
                     stakeWeightedShare,
                     true
                 );
             } else {
                 stake.reward += stakeWeightedShare;
+                stake.earnings += stakeWeightedShare;
                 rewardAmount += stakeWeightedShare;
             }
         }
