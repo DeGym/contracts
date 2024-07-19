@@ -87,7 +87,7 @@ contract StakeManager is Ownable {
         uint256 lockDuration
     ) external onlyBondPool {
         uint256 remainingDuration = startTime + lockDuration - block.timestamp;
-        if (remainingDuration > getAbsoluteMaxRemainingDuration()) {
+        if (remainingDuration > getAbsMaxRemainDuration()) {
             maxDuration = lockDuration;
             maxStartTime = startTime;
             emit MaxDurationUpdated(maxStartTime, maxDuration);
