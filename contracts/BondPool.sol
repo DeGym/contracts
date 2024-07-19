@@ -6,13 +6,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Token.sol";
 import "./StakeManager.sol";
 
-contract StakePool is Ownable {
+contract BondPool is Ownable {
     Token public daoToken;
     address public stakeManager;
     uint256 public totalStaked;
     uint256 public rewards;
 
-    struct StakeInfo {
+    struct Bond {
         uint256 amount;
         uint256 startTime;
         uint256 lockDuration;
@@ -22,17 +22,22 @@ contract StakePool is Ownable {
         uint256 earnings;
     }
 
-    StakeInfo[] public stakes;
+    Bond[] public bonds;
 
-    event Staked(
+    event Bonded(
         address indexed stakeholder,
         uint256 amount,
         uint256 lockDuration,
         bool isCompound
     );
-    event Unstaked(address indexed stakeholder, uint256 amount);
+    event Unbonded(address indexed stakeholder, uint256 amount);
     event RewardUpdated(address indexed stakeholder, uint256 rewardAmount);
     event RewardClaimed(address indexed stakeholder, uint256 rewardAmount);
+    event BondAmountIncreased(address indexed stakeholder, uint256 amount);
+    event LockDurationExtended(
+        address indexed stakeholder,
+        uint256 newDuration
+    );
 
     constructor(address owner, address _stakeManager) {
         transferOwnership(owner);
@@ -47,7 +52,12 @@ contract StakePool is Ownable {
         _;
     }
 
-    function stake(
+    modifier validBondIndex(uint256 bondIndex) {
+        require(bondIndex < bonds.length, "Invalid bond index");
+        _;
+    }
+
+    function bond(
         uint256 amount,
         uint256 lockDuration,
         bool isCompound
@@ -57,8 +67,8 @@ contract StakePool is Ownable {
         daoToken.transferFrom(msg.sender, address(this), amount);
 
         uint256 weight = calculateWeight(lockDuration);
-        stakes.push(
-            StakeInfo(
+        bonds.push(
+            Bond(
                 amount,
                 block.timestamp,
                 lockDuration,
@@ -71,63 +81,62 @@ contract StakePool is Ownable {
         totalStaked += amount;
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
-        emit Staked(msg.sender, amount, lockDuration, isCompound);
+        emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
-    function unstake(uint256 stakeIndex) external onlyOwner {
-        require(stakes.length > stakeIndex, "Invalid stake index");
-        StakeInfo storage stake = stakes[stakeIndex];
+    function unbond(
+        uint256 bondIndex
+    ) external onlyOwner validBondIndex(bondIndex) {
+        Bond storage bond = bonds[bondIndex];
         require(
-            block.timestamp >= stake.startTime + stake.lockDuration,
-            "Stake is still locked"
+            block.timestamp >= bond.startTime + bond.lockDuration,
+            "Bond is still locked"
         );
         require(
-            !stake.isCompound,
-            "Compound stakes cannot be unstaked before lock duration ends"
+            !bond.isCompound,
+            "Compound bonds cannot be unbonded before lock duration ends"
         );
 
-        uint256 amount = stake.amount;
-        stakes[stakeIndex] = stakes[stakes.length - 1];
-        stakes.pop();
+        uint256 amount = bond.amount;
+        bonds[bondIndex] = bonds[bonds.length - 1];
+        bonds.pop();
 
         totalStaked -= amount;
         daoToken.transfer(msg.sender, amount);
 
         StakeManager(stakeManager).updateTotalStaked(amount, false);
-        emit Unstaked(msg.sender, amount);
+        emit Unbonded(msg.sender, amount);
     }
 
-    function increaseStakeAmount(
-        uint256 stakeIndex,
+    function increaseBondAmount(
+        uint256 bondIndex,
         uint256 amount
-    ) external onlyOwner {
-        require(stakes.length > stakeIndex, "Invalid stake index");
+    ) external onlyOwner validBondIndex(bondIndex) {
         require(amount > 0, "Amount must be greater than 0");
 
-        StakeInfo storage stake = stakes[stakeIndex];
+        Bond storage bond = bonds[bondIndex];
         daoToken.transferFrom(msg.sender, address(this), amount);
-        stake.amount += amount;
+        bond.amount += amount;
         totalStaked += amount;
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
-        emit StakeAmountIncreased(msg.sender, amount);
+        emit BondAmountIncreased(msg.sender, amount);
     }
 
     function extendLockDuration(
-        uint256 stakeIndex,
+        uint256 bondIndex,
         uint256 additionalDuration
-    ) external onlyOwner {
-        require(stakes.length > stakeIndex, "Invalid stake index");
+    ) external onlyOwner validBondIndex(bondIndex) {
         require(
             additionalDuration > 0,
             "Additional duration must be greater than 0"
         );
 
-        StakeInfo storage stake = stakes[stakeIndex];
-        stake.lockDuration += additionalDuration;
-        stake.weight = calculateWeight(stake.lockDuration); // Recalculate weight
+        Bond storage bond = bonds[bondIndex];
+        bond.lockDuration += additionalDuration;
+        bond.weight = calculateWeight(bond.lockDuration); // Recalculate weight
 
-        emit LockDurationExtended(msg.sender, stake.lockDuration);
+        emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
     function updateReward(
@@ -137,21 +146,21 @@ contract StakePool is Ownable {
         uint256 rewardAmount = 0;
         uint256 totalWeightedStake = calculateTotalWeightedStake();
 
-        for (uint256 i = 0; i < stakes.length; i++) {
-            StakeInfo storage stake = stakes[i];
-            uint256 stakeWeightedShare = (stake.weight * daoRewards) /
+        for (uint256 i = 0; i < bonds.length; i++) {
+            Bond storage bond = bonds[i];
+            uint256 bondWeightedShare = (bond.weight * daoRewards) /
                 totalWeightedStake;
-            if (stake.isCompound) {
-                stake.amount += stakeWeightedShare;
-                stake.earnings += stakeWeightedShare;
+            if (bond.isCompound) {
+                bond.amount += bondWeightedShare;
+                bond.earnings += bondWeightedShare;
                 StakeManager(stakeManager).updateTotalStaked(
-                    stakeWeightedShare,
+                    bondWeightedShare,
                     true
                 );
             } else {
-                stake.reward += stakeWeightedShare;
-                stake.earnings += stakeWeightedShare;
-                rewardAmount += stakeWeightedShare;
+                bond.reward += bondWeightedShare;
+                bond.earnings += bondWeightedShare;
+                rewardAmount += bondWeightedShare;
             }
         }
         rewards += rewardAmount;
@@ -159,14 +168,15 @@ contract StakePool is Ownable {
         return rewardAmount;
     }
 
-    function claimRewards(uint256 stakeIndex) external onlyOwner {
-        require(stakes.length > stakeIndex, "Invalid stake index");
-        StakeInfo storage stake = stakes[stakeIndex];
-        require(!stake.isCompound, "Compound stakes cannot claim rewards");
+    function claimRewards(
+        uint256 bondIndex
+    ) external onlyOwner validBondIndex(bondIndex) {
+        Bond storage bond = bonds[bondIndex];
+        require(!bond.isCompound, "Compound bonds cannot claim rewards");
 
-        uint256 claimableRewards = stake.reward;
+        uint256 claimableRewards = bond.reward;
         require(claimableRewards > 0, "No rewards to claim");
-        stake.reward = 0;
+        bond.reward = 0;
 
         StakeManager(stakeManager).updateUnclaimedRewards(
             claimableRewards,
@@ -178,23 +188,19 @@ contract StakePool is Ownable {
 
     function calculateWeight(
         uint256 lockDuration
-    ) internal pure returns (uint256) {
-        return log(lockDuration + 1);
-    }
-
-    function log(uint256 x) internal pure returns (uint256) {
-        uint256 y = 0;
-        while (x >= 10) {
-            y++;
-            x /= 10;
-        }
-        return y;
+    ) internal view returns (uint256) {
+        uint256 remainingDuration = block.timestamp +
+            lockDuration -
+            block.timestamp;
+        uint256 absoluteMaxDuration = StakeManager(stakeManager)
+            .absoluteRemainingMaxDuration();
+        return remainingDuration / absoluteMaxDuration;
     }
 
     function calculateTotalWeightedStake() internal view returns (uint256) {
         uint256 totalWeightedStake = 0;
-        for (uint256 i = 0; i < stakes.length; i++) {
-            totalWeightedStake += stakes[i].amount * stakes[i].weight;
+        for (uint256 i = 0; i < bonds.length; i++) {
+            totalWeightedStake += bonds[i].amount * bonds[i].weight;
         }
         return totalWeightedStake;
     }

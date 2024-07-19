@@ -2,16 +2,17 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./StakePool.sol";
+import "./BondPool.sol";
 
 contract StakeManager is Ownable {
     IERC20 public daoToken;
-    mapping(address => address) public stakePools;
+    mapping(address => address) public bondPools;
     address[] public stakeholders;
     uint256 public totalStaked;
     uint256 public totalUnclaimedRewards;
+    uint256 public absoluteRemainingMaxDuration = 52 weeks; // Set a reasonable default value
 
-    event StakePoolDeployed(address indexed stakeholder, address stakePool);
+    event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 totalUnclaimedRewards);
 
@@ -19,19 +20,19 @@ contract StakeManager is Ownable {
         daoToken = IERC20(_daoToken);
     }
 
-    function deployStakePool() external {
+    function deployBondPool() external {
         require(
-            stakePools[msg.sender] == address(0),
-            "Stake pool already exists"
+            bondPools[msg.sender] == address(0),
+            "Bond pool already exists"
         );
-        StakePool stakePool = new StakePool(msg.sender, address(this));
-        stakePools[msg.sender] = address(stakePool);
+        BondPool bondPool = new BondPool(msg.sender, address(this));
+        bondPools[msg.sender] = address(bondPool);
         stakeholders.push(msg.sender);
-        emit StakePoolDeployed(msg.sender, address(stakePool));
+        emit BondPoolDeployed(msg.sender, address(bondPool));
     }
 
-    function getStakePool(address stakeholder) external view returns (address) {
-        return stakePools[stakeholder];
+    function getBondPool(address stakeholder) external view returns (address) {
+        return bondPools[stakeholder];
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
@@ -39,7 +40,7 @@ contract StakeManager is Ownable {
         uint256 totalRewardAmount = 0;
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
-            uint256 rewardAmount = StakePool(stakePools[stakeholder])
+            uint256 rewardAmount = BondPool(bondPools[stakeholder])
                 .updateReward(daoRewards, totalStakedAmount);
             totalRewardAmount += rewardAmount;
         }
@@ -49,8 +50,8 @@ contract StakeManager is Ownable {
 
     function updateTotalStaked(uint256 amount, bool isStaking) external {
         require(
-            stakePools[msg.sender] != address(0),
-            "Stake pool does not exist"
+            bondPools[msg.sender] != address(0),
+            "Bond pool does not exist"
         );
 
         if (isStaking) {
@@ -64,8 +65,8 @@ contract StakeManager is Ownable {
 
     function updateUnclaimedRewards(uint256 amount, bool isClaiming) external {
         require(
-            stakePools[msg.sender] != address(0),
-            "Stake pool does not exist"
+            bondPools[msg.sender] != address(0),
+            "Bond pool does not exist"
         );
 
         if (isClaiming) {
@@ -77,5 +78,11 @@ contract StakeManager is Ownable {
 
     function getTotalUnclaimedRewards() external view returns (uint256) {
         return totalUnclaimedRewards;
+    }
+
+    function setAbsoluteRemainingMaxDuration(
+        uint256 newMaxDuration
+    ) external onlyOwner {
+        absoluteRemainingMaxDuration = newMaxDuration;
     }
 }
