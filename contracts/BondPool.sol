@@ -80,12 +80,12 @@ contract BondPool is Ownable {
         );
         totalStaked += amount;
 
-        StakeManager(stakeManager).updateTotalStaked(amount, true);
+        StakeManager(stakeManager).updateAbsTotalStaked(amount, true);
         StakeManager(stakeManager).updateMaxDuration(
             block.timestamp,
             lockDuration
         );
-        updateBondWeight(oldWeight);
+        updateTotalBondWeight(oldWeight);
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
@@ -107,8 +107,8 @@ contract BondPool is Ownable {
 
         daoToken.transfer(msg.sender, amount);
 
-        StakeManager(stakeManager).updateTotalStaked(amount, false);
-        updateBondWeight(oldWeight);
+        StakeManager(stakeManager).updateAbsTotalStaked(amount, false);
+        updateTotalBondWeight(oldWeight);
         emit Unbonded(msg.sender, amount);
     }
 
@@ -125,8 +125,8 @@ contract BondPool is Ownable {
         bond.amount += amount;
         totalStaked += amount;
 
-        StakeManager(stakeManager).updateTotalStaked(amount, true);
-        updateBondWeight(oldWeight);
+        StakeManager(stakeManager).updateAbsTotalStaked(amount, true);
+        updateTotalBondWeight(oldWeight);
         emit BondAmountIncreased(msg.sender, amount);
     }
 
@@ -148,7 +148,7 @@ contract BondPool is Ownable {
             bond.startTime,
             bond.lockDuration
         );
-        updateBondWeight(oldWeight);
+        updateTotalBondWeight(oldWeight);
         emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
@@ -160,8 +160,7 @@ contract BondPool is Ownable {
         require(claimableRewards > 0, "No rewards to claim");
         bond.claimableReward = 0;
         totalClaimableRewards -= claimableRewards;
-
-        StakeManager(stakeManager).updateClaimableRewards(
+        StakeManager(stakeManager).updateAbsTotalClaimableRewards(
             claimableRewards,
             true
         );
@@ -205,11 +204,14 @@ contract BondPool is Ownable {
         return totalWeightedStake;
     }
 
-    function updateBondWeight(uint256 oldWeight) internal {
+    function updateTotalBondWeight(uint256 oldWeight) internal {
         totalWeight = calculateTotalWeightedStake(
             StakeManager(stakeManager).getAbsMaxRemainDuration()
         );
-        StakeManager(stakeManager).updateBondWeight(oldWeight, totalWeight);
+        StakeManager(stakeManager).updateAbsTotalBondWeight(
+            oldWeight,
+            totalWeight
+        );
     }
 
     function updateReward(
@@ -232,7 +234,8 @@ contract BondPool is Ownable {
                 bond.amount += bondWeightedShare;
                 bond.earnings += bondWeightedShare;
                 totalEarnings += bondWeightedShare;
-                StakeManager(stakeManager).updateTotalStaked(
+                totalStaked += bondWeightedShare;
+                StakeManager(stakeManager).updateAbsTotalStaked(
                     bondWeightedShare,
                     true
                 );

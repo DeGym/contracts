@@ -16,10 +16,10 @@ contract StakeManager is Ownable {
     uint256 public maxStartTime;
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
-    event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
+    event AbsStakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 absTotalClaimableRewards);
     event MaxDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
-    event BondWeightUpdated(uint256 oldWeight, uint256 newWeight);
+    event AbsTotalBondWeightUpdated(uint256 oldWeight, uint256 newWeight);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -59,7 +59,7 @@ contract StakeManager is Ownable {
         emit RewardsUpdated(absTotalClaimableRewards);
     }
 
-    function updateTotalStaked(
+    function updateAbsTotalStaked(
         uint256 amount,
         bool isStaking
     ) external onlyBondPool {
@@ -68,10 +68,10 @@ contract StakeManager is Ownable {
         } else {
             absTotalStaked -= amount;
         }
-        emit StakeUpdated(msg.sender, absTotalStaked);
+        emit AbsStakeUpdated(msg.sender, absTotalStaked);
     }
 
-    function updateClaimableRewards(
+    function updateAbsTotalClaimableRewards(
         uint256 amount,
         bool isClaiming
     ) external onlyBondPool {
@@ -116,12 +116,12 @@ contract StakeManager is Ownable {
         }
     }
 
-    function updateBondWeight(
+    function updateAbsTotalBondWeight(
         uint256 oldWeight,
         uint256 newWeight
     ) external onlyBondPool {
         absTotalBondWeight = absTotalBondWeight - oldWeight + newWeight;
-        emit BondWeightUpdated(oldWeight, newWeight);
+        emit AbsTotalBondWeightUpdated(oldWeight, newWeight);
     }
 
     function getAbsMaxRemainDuration() public view returns (uint256) {
