@@ -11,13 +11,12 @@ contract StakeManager is Ownable {
     uint256 public absTotalStaked;
     uint256 public absTotalEarnings;
     uint256 public absTotalClaimableRewards;
-    uint256 public totalUnclaimedRewards;
     uint256 public maxDuration;
     uint256 public maxStartTime;
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
-    event RewardsUpdated(uint256 totalUnclaimedRewards);
+    event RewardsUpdated(uint256 absTotalClaimableRewards);
     event MaxDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
 
     constructor(address _daoToken) {
@@ -56,8 +55,8 @@ contract StakeManager is Ownable {
                 .updateReward(daoRewards, totalStakedAmount);
             totalRewardAmount += rewardAmount;
         }
-        totalUnclaimedRewards += totalRewardAmount;
-        emit RewardsUpdated(totalUnclaimedRewards);
+        absTotalClaimableRewards += totalRewardAmount;
+        emit RewardsUpdated(absTotalClaimableRewards);
     }
 
     function updateTotalStaked(
@@ -72,14 +71,14 @@ contract StakeManager is Ownable {
         emit StakeUpdated(msg.sender, absTotalStaked);
     }
 
-    function updateUnclaimedRewards(
+    function updateClaimableRewards(
         uint256 amount,
         bool isClaiming
     ) external onlyBondPool {
         if (isClaiming) {
-            totalUnclaimedRewards -= amount;
+            absTotalClaimableRewards -= amount;
         } else {
-            totalUnclaimedRewards += amount;
+            absTotalClaimableRewards += amount;
         }
     }
 
@@ -119,9 +118,5 @@ contract StakeManager is Ownable {
 
     function getAbsoluteMaxRemainingDuration() public view returns (uint256) {
         return maxDuration - (block.timestamp - maxStartTime);
-    }
-
-    function getTotalUnclaimedRewards() external view returns (uint256) {
-        return totalUnclaimedRewards;
     }
 }

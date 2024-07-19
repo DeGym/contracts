@@ -19,7 +19,6 @@ contract BondPool is Ownable {
         uint256 lockDuration;
         bool isCompound;
         uint256 reward;
-        uint256 weight;
         uint256 earnings;
         uint256 claimableReward;
     }
@@ -73,18 +72,8 @@ contract BondPool is Ownable {
         require(lockDuration > 0, "Lock duration must be greater than 0");
         daoToken.transferFrom(msg.sender, address(this), amount);
 
-        uint256 weight = calculateWeight(lockDuration);
         bonds.push(
-            Bond(
-                amount,
-                block.timestamp,
-                lockDuration,
-                isCompound,
-                0,
-                weight,
-                0,
-                0
-            )
+            Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0, 0)
         );
         totalStaked += amount;
 
@@ -141,7 +130,6 @@ contract BondPool is Ownable {
 
         Bond storage bond = bonds[bondIndex];
         bond.lockDuration += additionalDuration;
-        bond.weight = calculateWeight(bond.lockDuration); // Recalculate weight
 
         StakeManager(stakeManager).updateMaxDuration(
             bond.startTime,
@@ -159,8 +147,8 @@ contract BondPool is Ownable {
 
         for (uint256 i = 0; i < bonds.length; i++) {
             Bond storage bond = bonds[i];
-            uint256 bondWeightedShare = (bond.weight * daoRewards) /
-                totalWeightedStake;
+            uint256 bondWeightedShare = (calculateWeight(bond.lockDuration) *
+                daoRewards) / totalWeightedStake;
             if (bond.isCompound) {
                 bond.amount += bondWeightedShare;
                 bond.earnings += bondWeightedShare;
@@ -190,7 +178,7 @@ contract BondPool is Ownable {
         bond.claimableReward = 0;
         totalClaimableRewards -= claimableRewards;
 
-        StakeManager(stakeManager).updateUnclaimedRewards(
+        StakeManager(stakeManager).updateClaimableRewards(
             claimableRewards,
             true
         );
@@ -212,15 +200,21 @@ contract BondPool is Ownable {
         uint256 remainingDuration = block.timestamp +
             lockDuration -
             block.timestamp;
+        if (remainingDuration < 0) {
+            remainingDuration = 1 days;
+        }
         uint256 absoluteMaxDuration = StakeManager(stakeManager)
             .getAbsoluteMaxRemainingDuration();
-        return remainingDuration / absoluteMaxDuration;
+        uint256 totalWeight = StakeManager(stakeManager).absTotalBondWeight();
+        return (remainingDuration * 1e18) / (absoluteMaxDuration * totalWeight);
     }
 
     function calculateTotalWeightedStake() internal view returns (uint256) {
         uint256 totalWeightedStake = 0;
         for (uint256 i = 0; i < bonds.length; i++) {
-            totalWeightedStake += bonds[i].amount * bonds[i].weight;
+            totalWeightedStake +=
+                bonds[i].amount *
+                calculateWeight(bonds[i].lockDuration);
         }
         return totalWeightedStake;
     }
