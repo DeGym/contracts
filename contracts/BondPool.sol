@@ -10,7 +10,8 @@ contract BondPool is Ownable {
     Token public daoToken;
     address public stakeManager;
     uint256 public totalStaked;
-    uint256 public rewards;
+    uint256 public totalEarnings;
+    uint256 public totalClaimableRewards;
 
     struct Bond {
         uint256 amount;
@@ -20,6 +21,7 @@ contract BondPool is Ownable {
         uint256 reward;
         uint256 weight;
         uint256 earnings;
+        uint256 claimableReward;
     }
 
     Bond[] public bonds;
@@ -37,6 +39,11 @@ contract BondPool is Ownable {
     event LockDurationExtended(
         address indexed stakeholder,
         uint256 newDuration
+    );
+    event CompoundStatusSwitched(
+        address indexed stakeholder,
+        uint256 bondIndex,
+        bool newCompoundStatus
     );
 
     constructor(address owner, address _stakeManager) {
@@ -75,6 +82,7 @@ contract BondPool is Ownable {
                 isCompound,
                 0,
                 weight,
+                0,
                 0
             )
         );
@@ -96,11 +104,6 @@ contract BondPool is Ownable {
             block.timestamp >= bond.startTime + bond.lockDuration,
             "Bond is still locked"
         );
-        require(
-            !bond.isCompound,
-            "Compound bonds cannot be unbonded before lock duration ends"
-        );
-
         uint256 amount = bond.amount;
         bonds[bondIndex] = bonds[bonds.length - 1];
         bonds.pop();
@@ -151,7 +154,7 @@ contract BondPool is Ownable {
         uint256 daoRewards,
         uint256 totalStakedAmount
     ) external onlyStakeManager returns (uint256) {
-        uint256 rewardAmount = 0;
+        uint256 claimableRewardAmount = 0;
         uint256 totalWeightedStake = calculateTotalWeightedStake();
 
         for (uint256 i = 0; i < bonds.length; i++) {
@@ -161,30 +164,31 @@ contract BondPool is Ownable {
             if (bond.isCompound) {
                 bond.amount += bondWeightedShare;
                 bond.earnings += bondWeightedShare;
+                totalEarnings += bondWeightedShare;
                 StakeManager(stakeManager).updateTotalStaked(
                     bondWeightedShare,
                     true
                 );
             } else {
-                bond.reward += bondWeightedShare;
+                bond.claimableReward += bondWeightedShare;
                 bond.earnings += bondWeightedShare;
-                rewardAmount += bondWeightedShare;
+                totalEarnings += bondWeightedShare;
+                claimableRewardAmount += bondWeightedShare;
             }
         }
-        rewards += rewardAmount;
-        emit RewardUpdated(owner(), rewardAmount);
-        return rewardAmount;
+        totalClaimableRewards += claimableRewardAmount;
+        emit RewardUpdated(owner(), claimableRewardAmount);
+        return claimableRewardAmount;
     }
 
     function claimRewards(
         uint256 bondIndex
     ) external onlyOwner validBondIndex(bondIndex) {
         Bond storage bond = bonds[bondIndex];
-        require(!bond.isCompound, "Compound bonds cannot claim rewards");
-
-        uint256 claimableRewards = bond.reward;
+        uint256 claimableRewards = bond.claimableReward;
         require(claimableRewards > 0, "No rewards to claim");
-        bond.reward = 0;
+        bond.claimableReward = 0;
+        totalClaimableRewards -= claimableRewards;
 
         StakeManager(stakeManager).updateUnclaimedRewards(
             claimableRewards,
@@ -192,6 +196,14 @@ contract BondPool is Ownable {
         );
         daoToken.mint(msg.sender, claimableRewards);
         emit RewardClaimed(msg.sender, claimableRewards);
+    }
+
+    function switchCompoundStatus(
+        uint256 bondIndex
+    ) external onlyOwner validBondIndex(bondIndex) {
+        Bond storage bond = bonds[bondIndex];
+        bond.isCompound = !bond.isCompound;
+        emit CompoundStatusSwitched(msg.sender, bondIndex, bond.isCompound);
     }
 
     function calculateWeight(
