@@ -181,8 +181,9 @@ contract BondPool is Ownable {
         emit CompoundStatusSwitched(msg.sender, bondIndex, bond.isCompound);
     }
 
-    function calculateWeight(
-        uint256 lockDuration
+    function calculateWeightedTime(
+        uint256 lockDuration,
+        uint256 absMaxRemainDuration
     ) internal view returns (uint256) {
         uint256 remainingDuration = block.timestamp +
             lockDuration -
@@ -190,35 +191,41 @@ contract BondPool is Ownable {
         if (remainingDuration < 0) {
             remainingDuration = 1 days;
         }
-        uint256 absoluteMaxDuration = StakeManager(stakeManager)
-            .getAbsoluteMaxRemainingDuration();
-        return (remainingDuration * 1e18) / absoluteMaxDuration;
+        return (remainingDuration * 1e18) / absMaxRemainDuration;
     }
 
-    function calculateTotalWeightedStake() internal view returns (uint256) {
+    function calculateTotalWeightedStake(uint256 absMaxRemainDuration) internal view returns (uint256) {
         uint256 totalWeightedStake = 0;
         for (uint256 i = 0; i < bonds.length; i++) {
             totalWeightedStake +=
                 bonds[i].amount *
-                calculateWeight(bonds[i].lockDuration);
+                calculateWeightedTime(
+                    bonds[i].lockDuration,
+                    absMaxRemainDuration
+                );
         }
         return totalWeightedStake;
     }
 
-    function updateBondWeight(uint256 oldWeight, uint256 newWeight) internal {
+    function updateBondWeight(
+        uint256 oldWeight,
+        uint256 newWeight
+    ) internal {
         StakeManager(stakeManager).updateBondWeight(oldWeight, newWeight);
     }
     function updateReward(
         uint256 daoRewards,
-        uint256 totalStakedAmount
+        uint256 totalStakedAmount,
+        uint256 absMaxRemainDuration
     ) external onlyStakeManager returns (uint256) {
         uint256 claimableRewardAmount = 0;
         uint256 totalWeightedStake = calculateTotalWeightedStake();
 
         for (uint256 i = 0; i < bonds.length; i++) {
             Bond storage bond = bonds[i];
-            uint256 bondWeightedShare = (calculateWeight(bond.lockDuration) *
-                daoRewards) / totalWeightedStake;
+            uint256 bondWeightedShare = (calculateWeightedTime(
+                bond.lockDuration, absMaxRemainDuration
+            ) * daoRewards) / totalWeightedStake;
             if (bond.isCompound) {
                 bond.amount += bondWeightedShare;
                 bond.earnings += bondWeightedShare;

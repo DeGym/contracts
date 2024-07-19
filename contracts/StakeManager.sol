@@ -49,15 +49,12 @@ contract StakeManager is Ownable {
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
-        uint256 totalStakedAmount = absTotalStaked;
-        uint256 totalRewardAmount = 0;
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
             uint256 rewardAmount = BondPool(bondPools[stakeholder])
-                .updateReward(daoRewards, totalStakedAmount);
-            totalRewardAmount += rewardAmount;
+                .updateReward(daoRewards, absTotalStaked, getAbsMaxRemainDuration());
+            absTotalClaimableRewards += rewardAmount;
         }
-        absTotalClaimableRewards += totalRewardAmount;
         emit RewardsUpdated(absTotalClaimableRewards);
     }
 
@@ -119,14 +116,14 @@ contract StakeManager is Ownable {
     }
 
     function updateBondWeight(
-        uint256 oldWeight, 
+        uint256 oldWeight,
         uint256 newWeight
     ) external onlyBondPool {
         absTotalBondWeight = absTotalBondWeight - oldWeight + newWeight;
         emit BondWeightUpdated(oldWeight, newWeight);
     }
 
-    function getAbsoluteMaxRemainingDuration() public view returns (uint256) {
+    function getAbsMaxRemainDuration() public view returns (uint256) {
         return maxDuration - (block.timestamp - maxStartTime);
     }
 }
