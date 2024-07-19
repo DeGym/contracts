@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakePool.sol";
-import "./Token.sol";
 
 contract StakeManager is Ownable {
     IERC20 public daoToken;
@@ -25,11 +24,7 @@ contract StakeManager is Ownable {
             stakePools[msg.sender] == address(0),
             "Stake pool already exists"
         );
-        StakePool stakePool = new StakePool(
-            address(daoToken),
-            msg.sender,
-            address(this)
-        );
+        StakePool stakePool = new StakePool(msg.sender, address(this));
         stakePools[msg.sender] = address(stakePool);
         stakeholders.push(msg.sender);
         emit StakePoolDeployed(msg.sender, address(stakePool));

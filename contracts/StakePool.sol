@@ -18,6 +18,7 @@ contract StakePool is Ownable {
         uint256 lockDuration;
         bool isCompound;
         uint256 reward;
+        uint256 weight;
     }
 
     StakeInfo[] public stakes;
@@ -54,8 +55,16 @@ contract StakePool is Ownable {
         require(lockDuration > 0, "Lock duration must be greater than 0");
         daoToken.transferFrom(msg.sender, address(this), amount);
 
+        uint256 weight = calculateWeight(lockDuration);
         stakes.push(
-            StakeInfo(amount, block.timestamp, lockDuration, isCompound, 0)
+            StakeInfo(
+                amount,
+                block.timestamp,
+                lockDuration,
+                isCompound,
+                0,
+                weight
+            )
         );
         totalStaked += amount;
 
@@ -114,6 +123,7 @@ contract StakePool is Ownable {
 
         StakeInfo storage stake = stakes[stakeIndex];
         stake.lockDuration += additionalDuration;
+        stake.weight = calculateWeight(stake.lockDuration); // Recalculate weight
 
         emit LockDurationExtended(msg.sender, stake.lockDuration);
     }
@@ -122,21 +132,66 @@ contract StakePool is Ownable {
         uint256 daoRewards,
         uint256 totalStakedAmount
     ) external onlyStakeManager returns (uint256) {
-        uint256 rewardAmount = (totalStaked * daoRewards) / totalStakedAmount;
+        uint256 rewardAmount = 0;
+        uint256 totalWeightedStake = calculateTotalWeightedStake();
+
+        for (uint256 i = 0; i < stakes.length; i++) {
+            StakeInfo storage stake = stakes[i];
+            uint256 stakeWeightedShare = (stake.weight * daoRewards) /
+                totalWeightedStake;
+            if (stake.isCompound) {
+                stake.amount += stakeWeightedShare;
+                StakeManager(stakeManager).updateTotalStaked(
+                    stakeWeightedShare,
+                    true
+                );
+            } else {
+                stake.reward += stakeWeightedShare;
+                rewardAmount += stakeWeightedShare;
+            }
+        }
         rewards += rewardAmount;
         emit RewardUpdated(owner(), rewardAmount);
         return rewardAmount;
     }
 
-    function claimRewards() external onlyOwner {
-        uint256 claimableRewards = rewards;
+    function claimRewards(uint256 stakeIndex) external onlyOwner {
+        require(stakes.length > stakeIndex, "Invalid stake index");
+        StakeInfo storage stake = stakes[stakeIndex];
+        require(!stake.isCompound, "Compound stakes cannot claim rewards");
+
+        uint256 claimableRewards = stake.reward;
         require(claimableRewards > 0, "No rewards to claim");
-        rewards = 0;
+        stake.reward = 0;
+
         StakeManager(stakeManager).updateUnclaimedRewards(
             claimableRewards,
             true
         );
         daoToken.mint(msg.sender, claimableRewards);
         emit RewardClaimed(msg.sender, claimableRewards);
+    }
+
+    function calculateWeight(
+        uint256 lockDuration
+    ) internal pure returns (uint256) {
+        return log(lockDuration + 1);
+    }
+
+    function log(uint256 x) internal pure returns (uint256) {
+        uint256 y = 0;
+        while (x >= 10) {
+            y++;
+            x /= 10;
+        }
+        return y;
+    }
+
+    function calculateTotalWeightedStake() internal view returns (uint256) {
+        uint256 totalWeightedStake = 0;
+        for (uint256 i = 0; i < stakes.length; i++) {
+            totalWeightedStake += stakes[i].amount * stakes[i].weight;
+        }
+        return totalWeightedStake;
     }
 }
