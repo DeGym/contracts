@@ -8,7 +8,9 @@ contract StakeManager is Ownable {
     IERC20 public daoToken;
     mapping(address => address) public bondPools;
     address[] public stakeholders;
-    uint256 public totalStaked;
+    uint256 public absTotalStaked;
+    uint256 public absTotalEarnings;
+    uint256 public absTotalClaimableRewards;
     uint256 public totalUnclaimedRewards;
     uint256 public maxDuration;
     uint256 public maxStartTime;
@@ -46,7 +48,7 @@ contract StakeManager is Ownable {
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
-        uint256 totalStakedAmount = totalStaked;
+        uint256 totalStakedAmount = absTotalStaked;
         uint256 totalRewardAmount = 0;
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
@@ -63,11 +65,11 @@ contract StakeManager is Ownable {
         bool isStaking
     ) external onlyBondPool {
         if (isStaking) {
-            totalStaked += amount;
+            absTotalStaked += amount;
         } else {
-            totalStaked -= amount;
+            absTotalStaked -= amount;
         }
-        emit StakeUpdated(msg.sender, totalStaked);
+        emit StakeUpdated(msg.sender, absTotalStaked);
     }
 
     function updateUnclaimedRewards(
@@ -90,6 +92,28 @@ contract StakeManager is Ownable {
             maxDuration = lockDuration;
             maxStartTime = startTime;
             emit MaxDurationUpdated(maxStartTime, maxDuration);
+        }
+    }
+
+    function updateAbsTotalEarnings(
+        uint256 amount,
+        bool isAdding
+    ) external onlyBondPool {
+        if (isAdding) {
+            absTotalEarnings += amount;
+        } else {
+            absTotalEarnings -= amount;
+        }
+    }
+
+    function updateAbsTotalClaimableRewards(
+        uint256 amount,
+        bool isAdding
+    ) external onlyBondPool {
+        if (isAdding) {
+            absTotalClaimableRewards += amount;
+        } else {
+            absTotalClaimableRewards -= amount;
         }
     }
 
