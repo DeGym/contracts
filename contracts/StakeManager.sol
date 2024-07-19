@@ -10,11 +10,13 @@ contract StakeManager is Ownable {
     address[] public stakeholders;
     uint256 public totalStaked;
     uint256 public totalUnclaimedRewards;
-    uint256 public absoluteRemainingMaxDuration = 52 weeks; // Set a reasonable default value
+    uint256 public maxDuration;
+    uint256 public maxStartTime;
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 totalUnclaimedRewards);
+    event MaxDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -76,13 +78,25 @@ contract StakeManager is Ownable {
         }
     }
 
-    function getTotalUnclaimedRewards() external view returns (uint256) {
-        return totalUnclaimedRewards;
+    function updateMaxDuration(uint256 startTime, uint256 lockDuration) external {
+        require(
+            bondPools[msg.sender] != address(0),
+            "Bond pool does not exist"
+        );
+
+        uint256 remainingDuration = startTime + lockDuration - block.timestamp;
+        if (remainingDuration > getAbsoluteMaxRemainingDuration()) {
+            maxDuration = lockDuration;
+            maxStartTime = startTime;
+            emit MaxDurationUpdated(maxStartTime, maxDuration);
+        }
     }
 
-    function setAbsoluteRemainingMaxDuration(
-        uint256 newMaxDuration
-    ) external onlyOwner {
-        absoluteRemainingMaxDuration = newMaxDuration;
+    function getAbsoluteMaxRemainingDuration() public view returns (uint256) {
+        return maxDuration - (block.timestamp - maxStartTime);
+    }
+
+    function getTotalUnclaimedRewards() external view returns (uint256) {
+        return totalUnclaimedRewards;
     }
 }

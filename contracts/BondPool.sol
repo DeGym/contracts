@@ -81,6 +81,10 @@ contract BondPool is Ownable {
         totalStaked += amount;
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
+        StakeManager(stakeManager).updateMaxDuration(
+            block.timestamp,
+            lockDuration
+        );
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
@@ -136,6 +140,10 @@ contract BondPool is Ownable {
         bond.lockDuration += additionalDuration;
         bond.weight = calculateWeight(bond.lockDuration); // Recalculate weight
 
+        StakeManager(stakeManager).updateMaxDuration(
+            bond.startTime,
+            bond.lockDuration
+        );
         emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
@@ -193,7 +201,7 @@ contract BondPool is Ownable {
             lockDuration -
             block.timestamp;
         uint256 absoluteMaxDuration = StakeManager(stakeManager)
-            .absoluteRemainingMaxDuration();
+            .getAbsoluteMaxRemainingDuration();
         return remainingDuration / absoluteMaxDuration;
     }
 
