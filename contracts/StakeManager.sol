@@ -13,11 +13,13 @@ contract StakeManager is Ownable {
     uint256 public absTotalClaimableRewards;
     uint256 public maxDuration;
     uint256 public maxStartTime;
+    uint256 public absTotalBondWeight; // New variable to store total weight
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event StakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 absTotalClaimableRewards);
     event MaxDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
+    event BondWeightUpdated(uint256 newTotalWeight);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -116,7 +118,19 @@ contract StakeManager is Ownable {
         }
     }
 
+    function updateBondWeight(
+        uint256 oldWeight,
+        uint256 newWeight
+    ) external onlyBondPool {
+        absTotalBondWeight = absTotalBondWeight - oldWeight + newWeight;
+        emit BondWeightUpdated(absTotalBondWeight);
+    }
+
     function getAbsoluteMaxRemainingDuration() public view returns (uint256) {
         return maxDuration - (block.timestamp - maxStartTime);
+    }
+
+    function absTotalBondWeight() external view returns (uint256) {
+        return absTotalBondWeight;
     }
 }

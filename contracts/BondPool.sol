@@ -8,11 +8,11 @@ import "./StakeManager.sol";
 
 contract BondPool is Ownable {
     Token public daoToken;
-    address public stakeManager;
+    StakeManager public stakeManager;
     uint256 public totalStaked;
     uint256 public totalEarnings;
-    uint256 public totalClaimableRewards;
-
+    uint256 public ;
+totalClaimableRewards
     struct Bond {
         uint256 amount;
         uint256 startTime;
@@ -72,6 +72,8 @@ contract BondPool is Ownable {
         require(lockDuration > 0, "Lock duration must be greater than 0");
         daoToken.transferFrom(msg.sender, address(this), amount);
 
+        uint256 oldWeight = calculateTotalWeightedStake();
+        
         bonds.push(
             Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0, 0)
         );
@@ -82,12 +84,15 @@ contract BondPool is Ownable {
             block.timestamp,
             lockDuration
         );
+        updateBondWeight(oldWeight);
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
     function unbond(
         uint256 bondIndex
     ) external onlyOwner validBondIndex(bondIndex) {
+        uint256 oldWeight = calculateTotalWeightedStake();
+        
         Bond storage bond = bonds[bondIndex];
         require(
             block.timestamp >= bond.startTime + bond.lockDuration,
@@ -101,6 +106,7 @@ contract BondPool is Ownable {
         daoToken.transfer(msg.sender, amount);
 
         StakeManager(stakeManager).updateTotalStaked(amount, false);
+        updateBondWeight(oldWeight);
         emit Unbonded(msg.sender, amount);
     }
 
@@ -110,12 +116,15 @@ contract BondPool is Ownable {
     ) external onlyOwner validBondIndex(bondIndex) {
         require(amount > 0, "Amount must be greater than 0");
 
+        uint256 oldWeight = calculateTotalWeightedStake();
+        
         Bond storage bond = bonds[bondIndex];
         daoToken.transferFrom(msg.sender, address(this), amount);
         bond.amount += amount;
         totalStaked += amount;
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
+        updateBondWeight(oldWeight);
         emit BondAmountIncreased(msg.sender, amount);
     }
 
@@ -128,6 +137,8 @@ contract BondPool is Ownable {
             "Additional duration must be greater than 0"
         );
 
+        uint256 oldWeight = calculateTotalWeightedStake();
+        
         Bond storage bond = bonds[bondIndex];
         bond.lockDuration += additionalDuration;
 
@@ -135,6 +146,7 @@ contract BondPool is Ownable {
             bond.startTime,
             bond.lockDuration
         );
+        updateBondWeight(oldWeight);
         emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
@@ -205,8 +217,7 @@ contract BondPool is Ownable {
         }
         uint256 absoluteMaxDuration = StakeManager(stakeManager)
             .getAbsoluteMaxRemainingDuration();
-        uint256 totalWeight = StakeManager(stakeManager).absTotalBondWeight();
-        return (remainingDuration * 1e18) / (absoluteMaxDuration * totalWeight);
+        return (remainingDuration * 1e18) / absoluteMaxDuration;
     }
 
     function calculateTotalWeightedStake() internal view returns (uint256) {
@@ -217,5 +228,10 @@ contract BondPool is Ownable {
                 calculateWeight(bonds[i].lockDuration);
         }
         return totalWeightedStake;
+    }
+
+    function updateBondWeight(uint256 oldWeight) internal {
+        uint256 newWeight = calculateTotalWeightedStake();
+        StakeManager(stakeManager).updateBondWeight(oldWeight, newWeight);
     }
 }
