@@ -49,10 +49,11 @@ contract StakeManager is Ownable {
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
+        uint256 absMaxRemainDuration = getAbsMaxRemainDuration();
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
             uint256 rewardAmount = BondPool(bondPools[stakeholder])
-                .updateReward(daoRewards, absTotalStaked, getAbsMaxRemainDuration());
+                .updateReward(daoRewards, absTotalStaked, absMaxRemainDuration);
             absTotalClaimableRewards += rewardAmount;
         }
         emit RewardsUpdated(absTotalClaimableRewards);

@@ -79,14 +79,13 @@ contract BondPool is Ownable {
             Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0, 0)
         );
         totalStaked += amount;
-        totalWeight = calculateTotalWeightedStake();
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
         StakeManager(stakeManager).updateMaxDuration(
             block.timestamp,
             lockDuration
         );
-        updateBondWeight(oldWeight, totalWeight);
+        updateBondWeight(oldWeight);
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
@@ -105,12 +104,11 @@ contract BondPool is Ownable {
         bonds.pop();
 
         totalStaked -= amount;
-        totalWeight = calculateTotalWeightedStake();
 
         daoToken.transfer(msg.sender, amount);
 
         StakeManager(stakeManager).updateTotalStaked(amount, false);
-        updateBondWeight(oldWeight, totalWeight);
+        updateBondWeight(oldWeight);
         emit Unbonded(msg.sender, amount);
     }
 
@@ -126,10 +124,9 @@ contract BondPool is Ownable {
         daoToken.transferFrom(msg.sender, address(this), amount);
         bond.amount += amount;
         totalStaked += amount;
-        totalWeight = calculateTotalWeightedStake();
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
-        updateBondWeight(oldWeight, totalWeight);
+        updateBondWeight(oldWeight);
         emit BondAmountIncreased(msg.sender, amount);
     }
 
@@ -147,12 +144,11 @@ contract BondPool is Ownable {
         Bond storage bond = bonds[bondIndex];
         bond.lockDuration += additionalDuration;
 
-        totalWeight = calculateTotalWeightedStake();
         StakeManager(stakeManager).updateMaxDuration(
             bond.startTime,
             bond.lockDuration
         );
-        updateBondWeight(oldWeight, totalWeight);
+        updateBondWeight(oldWeight);
         emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
@@ -194,7 +190,9 @@ contract BondPool is Ownable {
         return (remainingDuration * 1e18) / absMaxRemainDuration;
     }
 
-    function calculateTotalWeightedStake(uint256 absMaxRemainDuration) internal view returns (uint256) {
+    function calculateTotalWeightedStake(
+        uint256 absMaxRemainDuration
+    ) internal view returns (uint256) {
         uint256 totalWeightedStake = 0;
         for (uint256 i = 0; i < bonds.length; i++) {
             totalWeightedStake +=
@@ -207,24 +205,28 @@ contract BondPool is Ownable {
         return totalWeightedStake;
     }
 
-    function updateBondWeight(
-        uint256 oldWeight,
-        uint256 newWeight
-    ) internal {
-        StakeManager(stakeManager).updateBondWeight(oldWeight, newWeight);
+    function updateBondWeight(uint256 oldWeight) internal {
+        totalWeight = calculateTotalWeightedStake(
+            StakeManager(stakeManager).getAbsMaxRemainDuration()
+        );
+        StakeManager(stakeManager).updateBondWeight(oldWeight, totalWeight);
     }
+
     function updateReward(
         uint256 daoRewards,
         uint256 totalStakedAmount,
         uint256 absMaxRemainDuration
     ) external onlyStakeManager returns (uint256) {
         uint256 claimableRewardAmount = 0;
-        uint256 totalWeightedStake = calculateTotalWeightedStake();
+        uint256 totalWeightedStake = calculateTotalWeightedStake(
+            absMaxRemainDuration
+        );
 
         for (uint256 i = 0; i < bonds.length; i++) {
             Bond storage bond = bonds[i];
             uint256 bondWeightedShare = (calculateWeightedTime(
-                bond.lockDuration, absMaxRemainDuration
+                bond.lockDuration,
+                absMaxRemainDuration
             ) * daoRewards) / totalWeightedStake;
             if (bond.isCompound) {
                 bond.amount += bondWeightedShare;
