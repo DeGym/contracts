@@ -11,8 +11,9 @@ contract BondPool is Ownable {
     StakeManager public stakeManager;
     uint256 public totalStaked;
     uint256 public totalEarnings;
-    uint256 public ;
-totalClaimableRewards
+    uint256 public totalClaimableRewards;
+    uint256 public totalWeight;
+
     struct Bond {
         uint256 amount;
         uint256 startTime;
@@ -72,27 +73,28 @@ totalClaimableRewards
         require(lockDuration > 0, "Lock duration must be greater than 0");
         daoToken.transferFrom(msg.sender, address(this), amount);
 
-        uint256 oldWeight = calculateTotalWeightedStake();
-        
+        uint256 oldWeight = totalWeight;
+
         bonds.push(
             Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0, 0)
         );
         totalStaked += amount;
+        totalWeight = calculateTotalWeightedStake();
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
         StakeManager(stakeManager).updateMaxDuration(
             block.timestamp,
             lockDuration
         );
-        updateBondWeight(oldWeight);
+        updateBondWeight(oldWeight, totalWeight);
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
     function unbond(
         uint256 bondIndex
     ) external onlyOwner validBondIndex(bondIndex) {
-        uint256 oldWeight = calculateTotalWeightedStake();
-        
+        uint256 oldWeight = totalWeight;
+
         Bond storage bond = bonds[bondIndex];
         require(
             block.timestamp >= bond.startTime + bond.lockDuration,
@@ -103,10 +105,12 @@ totalClaimableRewards
         bonds.pop();
 
         totalStaked -= amount;
+        totalWeight = calculateTotalWeightedStake();
+
         daoToken.transfer(msg.sender, amount);
 
         StakeManager(stakeManager).updateTotalStaked(amount, false);
-        updateBondWeight(oldWeight);
+        updateBondWeight(oldWeight, totalWeight);
         emit Unbonded(msg.sender, amount);
     }
 
@@ -116,15 +120,16 @@ totalClaimableRewards
     ) external onlyOwner validBondIndex(bondIndex) {
         require(amount > 0, "Amount must be greater than 0");
 
-        uint256 oldWeight = calculateTotalWeightedStake();
-        
+        uint256 oldWeight = totalWeight;
+
         Bond storage bond = bonds[bondIndex];
         daoToken.transferFrom(msg.sender, address(this), amount);
         bond.amount += amount;
         totalStaked += amount;
+        totalWeight = calculateTotalWeightedStake();
 
         StakeManager(stakeManager).updateTotalStaked(amount, true);
-        updateBondWeight(oldWeight);
+        updateBondWeight(oldWeight, totalWeight);
         emit BondAmountIncreased(msg.sender, amount);
     }
 
@@ -137,48 +142,18 @@ totalClaimableRewards
             "Additional duration must be greater than 0"
         );
 
-        uint256 oldWeight = calculateTotalWeightedStake();
-        
+        uint256 oldWeight = totalWeight;
+
         Bond storage bond = bonds[bondIndex];
         bond.lockDuration += additionalDuration;
 
+        totalWeight = calculateTotalWeightedStake();
         StakeManager(stakeManager).updateMaxDuration(
             bond.startTime,
             bond.lockDuration
         );
-        updateBondWeight(oldWeight);
+        updateBondWeight(oldWeight, totalWeight);
         emit LockDurationExtended(msg.sender, bond.lockDuration);
-    }
-
-    function updateReward(
-        uint256 daoRewards,
-        uint256 totalStakedAmount
-    ) external onlyStakeManager returns (uint256) {
-        uint256 claimableRewardAmount = 0;
-        uint256 totalWeightedStake = calculateTotalWeightedStake();
-
-        for (uint256 i = 0; i < bonds.length; i++) {
-            Bond storage bond = bonds[i];
-            uint256 bondWeightedShare = (calculateWeight(bond.lockDuration) *
-                daoRewards) / totalWeightedStake;
-            if (bond.isCompound) {
-                bond.amount += bondWeightedShare;
-                bond.earnings += bondWeightedShare;
-                totalEarnings += bondWeightedShare;
-                StakeManager(stakeManager).updateTotalStaked(
-                    bondWeightedShare,
-                    true
-                );
-            } else {
-                bond.claimableReward += bondWeightedShare;
-                bond.earnings += bondWeightedShare;
-                totalEarnings += bondWeightedShare;
-                claimableRewardAmount += bondWeightedShare;
-            }
-        }
-        totalClaimableRewards += claimableRewardAmount;
-        emit RewardUpdated(owner(), claimableRewardAmount);
-        return claimableRewardAmount;
     }
 
     function claimRewards(
@@ -230,8 +205,37 @@ totalClaimableRewards
         return totalWeightedStake;
     }
 
-    function updateBondWeight(uint256 oldWeight) internal {
-        uint256 newWeight = calculateTotalWeightedStake();
+    function updateBondWeight(uint256 oldWeight, uint256 newWeight) internal {
         StakeManager(stakeManager).updateBondWeight(oldWeight, newWeight);
+    }
+    function updateReward(
+        uint256 daoRewards,
+        uint256 totalStakedAmount
+    ) external onlyStakeManager returns (uint256) {
+        uint256 claimableRewardAmount = 0;
+        uint256 totalWeightedStake = calculateTotalWeightedStake();
+
+        for (uint256 i = 0; i < bonds.length; i++) {
+            Bond storage bond = bonds[i];
+            uint256 bondWeightedShare = (calculateWeight(bond.lockDuration) *
+                daoRewards) / totalWeightedStake;
+            if (bond.isCompound) {
+                bond.amount += bondWeightedShare;
+                bond.earnings += bondWeightedShare;
+                totalEarnings += bondWeightedShare;
+                StakeManager(stakeManager).updateTotalStaked(
+                    bondWeightedShare,
+                    true
+                );
+            } else {
+                bond.claimableReward += bondWeightedShare;
+                bond.earnings += bondWeightedShare;
+                totalEarnings += bondWeightedShare;
+                claimableRewardAmount += bondWeightedShare;
+            }
+        }
+        totalClaimableRewards += claimableRewardAmount;
+        emit RewardUpdated(owner(), claimableRewardAmount);
+        return claimableRewardAmount;
     }
 }
