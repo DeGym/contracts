@@ -18,7 +18,7 @@ contract StakeManager is Ownable {
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event AbsStakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 absTotalClaimableRewards);
-    event MaxDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
+    event MaxRemainDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
     event AbsTotalBondWeightUpdated(uint256 oldWeight, uint256 newWeight);
 
     constructor(address _daoToken) {
@@ -90,7 +90,7 @@ contract StakeManager is Ownable {
         if (remainingDuration > getAbsMaxRemainDuration()) {
             maxDuration = lockDuration;
             maxStartTime = startTime;
-            emit MaxDurationUpdated(maxStartTime, maxDuration);
+            emit MaxRemainDurationUpdated(maxStartTime, maxDuration);
         }
     }
 

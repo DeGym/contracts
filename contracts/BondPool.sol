@@ -8,7 +8,7 @@ import "./StakeManager.sol";
 
 contract BondPool is Ownable {
     Token public daoToken;
-    StakeManager public stakeManager;
+    address public stakeManager;
     uint256 public totalStaked;
     uint256 public totalEarnings;
     uint256 public totalClaimableRewards;
