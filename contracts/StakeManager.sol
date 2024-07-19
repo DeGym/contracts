@@ -22,6 +22,14 @@ contract StakeManager is Ownable {
         daoToken = IERC20(_daoToken);
     }
 
+    modifier onlyBondPool() {
+        require(
+            bondPools[msg.sender] != address(0),
+            "Only bond pool can perform this action"
+        );
+        _;
+    }
+
     function deployBondPool() external {
         require(
             bondPools[msg.sender] == address(0),
@@ -50,27 +58,22 @@ contract StakeManager is Ownable {
         emit RewardsUpdated(totalUnclaimedRewards);
     }
 
-    function updateTotalStaked(uint256 amount, bool isStaking) external {
-        require(
-            bondPools[msg.sender] != address(0),
-            "Bond pool does not exist"
-        );
-
+    function updateTotalStaked(
+        uint256 amount,
+        bool isStaking
+    ) external onlyBondPool {
         if (isStaking) {
             totalStaked += amount;
         } else {
             totalStaked -= amount;
         }
-
         emit StakeUpdated(msg.sender, totalStaked);
     }
 
-    function updateUnclaimedRewards(uint256 amount, bool isClaiming) external {
-        require(
-            bondPools[msg.sender] != address(0),
-            "Bond pool does not exist"
-        );
-
+    function updateUnclaimedRewards(
+        uint256 amount,
+        bool isClaiming
+    ) external onlyBondPool {
         if (isClaiming) {
             totalUnclaimedRewards -= amount;
         } else {
@@ -78,12 +81,10 @@ contract StakeManager is Ownable {
         }
     }
 
-    function updateMaxDuration(uint256 startTime, uint256 lockDuration) external {
-        require(
-            bondPools[msg.sender] != address(0),
-            "Bond pool does not exist"
-        );
-
+    function updateMaxDuration(
+        uint256 startTime,
+        uint256 lockDuration
+    ) external onlyBondPool {
         uint256 remainingDuration = startTime + lockDuration - block.timestamp;
         if (remainingDuration > getAbsoluteMaxRemainingDuration()) {
             maxDuration = lockDuration;
