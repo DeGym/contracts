@@ -77,7 +77,7 @@ This system consists of six primary smart contracts that handle the management o
   - `AbsTotalBondWeightUpdated`: Emitted when the total bond weight is updated.
 
 
-### BoolPool.sol
+### BondPool.sol
 - **Purpose**: Manages the staking and reward distribution for a specific stakeholder.
 - **Key Functions**:
   - `bond`: Allows the user to create a new bond with a specified amount, lock duration, and compound setting.
