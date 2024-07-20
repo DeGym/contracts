@@ -8,7 +8,7 @@ import "./StakeManager.sol";
 
 contract BondPool is Ownable {
     Token public daoToken;
-    address public stakeManager;
+    StakeManager public stakeManager;
     uint256 public totalStaked;
     uint256 public totalEarnings;
     uint256 public totalClaimableRewards;
@@ -19,7 +19,6 @@ contract BondPool is Ownable {
         uint256 startTime;
         uint256 lockDuration;
         bool isCompound;
-        uint256 reward;
         uint256 earnings;
         uint256 claimableReward;
     }
@@ -53,7 +52,7 @@ contract BondPool is Ownable {
 
     modifier onlyStakeManager() {
         require(
-            msg.sender == stakeManager,
+            msg.sender == address(stakeManager.owner()),
             "Only stake manager can perform this action"
         );
         _;
@@ -76,24 +75,21 @@ contract BondPool is Ownable {
         uint256 oldWeight = totalWeight;
 
         bonds.push(
-            Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0, 0)
+            Bond(amount, block.timestamp, lockDuration, isCompound, 0, 0)
         );
         totalStaked += amount;
+        uint256 bondWeight = calculateWeight(amount, lockDuration);
+        totalWeight += bondWeight;
 
-        StakeManager(stakeManager).updateAbsTotalStaked(amount, true);
-        StakeManager(stakeManager).updateMaxDuration(
-            block.timestamp,
-            lockDuration
-        );
-        updateTotalBondWeight(oldWeight);
+        stakeManager.updateAbsTotalStaked(amount, true);
+        stakeManager.updateMaxDuration(block.timestamp, lockDuration);
+        stakeManager.updateAbsTotalBondWeight(bondWeight);
         emit Bonded(msg.sender, amount, lockDuration, isCompound);
     }
 
     function unbond(
         uint256 bondIndex
     ) external onlyOwner validBondIndex(bondIndex) {
-        uint256 oldWeight = totalWeight;
-
         Bond storage bond = bonds[bondIndex];
         require(
             block.timestamp >= bond.startTime + bond.lockDuration,
@@ -104,11 +100,13 @@ contract BondPool is Ownable {
         bonds.pop();
 
         totalStaked -= amount;
+        uint256 bondWeight = calculateWeight(amount, bond.lockDuration);
+        totalWeight -= bondWeight;
 
         daoToken.transfer(msg.sender, amount);
 
-        StakeManager(stakeManager).updateAbsTotalStaked(amount, false);
-        updateTotalBondWeight(oldWeight);
+        stakeManager.updateAbsTotalStaked(amount, false);
+        stakeManager.updateAbsTotalBondWeight(-bondWeight);
         emit Unbonded(msg.sender, amount);
     }
 
@@ -118,15 +116,17 @@ contract BondPool is Ownable {
     ) external onlyOwner validBondIndex(bondIndex) {
         require(amount > 0, "Amount must be greater than 0");
 
-        uint256 oldWeight = totalWeight;
-
         Bond storage bond = bonds[bondIndex];
+        uint256 oldWeight = calculateWeight(bond.amount, bond.lockDuration);
         daoToken.transferFrom(msg.sender, address(this), amount);
         bond.amount += amount;
         totalStaked += amount;
 
-        StakeManager(stakeManager).updateAbsTotalStaked(amount, true);
-        updateTotalBondWeight(oldWeight);
+        uint256 newWeight = calculateWeight(bond.amount, bond.lockDuration);
+        totalWeight = totalWeight - oldWeight + newWeight;
+
+        stakeManager.updateAbsTotalStaked(amount, true);
+        stakeManager.updateAbsTotalBondWeight(newWeight - oldWeight);
         emit BondAmountIncreased(msg.sender, amount);
     }
 
@@ -139,16 +139,15 @@ contract BondPool is Ownable {
             "Additional duration must be greater than 0"
         );
 
-        uint256 oldWeight = totalWeight;
-
         Bond storage bond = bonds[bondIndex];
+        uint256 oldWeight = calculateWeight(bond.amount, bond.lockDuration);
         bond.lockDuration += additionalDuration;
 
-        StakeManager(stakeManager).updateMaxDuration(
-            bond.startTime,
-            bond.lockDuration
-        );
-        updateTotalBondWeight(oldWeight);
+        uint256 newWeight = calculateWeight(bond.amount, bond.lockDuration);
+        totalWeight = totalWeight - oldWeight + newWeight;
+
+        stakeManager.updateMaxDuration(bond.startTime, bond.lockDuration);
+        stakeManager.updateAbsTotalBondWeight(newWeight - oldWeight);
         emit LockDurationExtended(msg.sender, bond.lockDuration);
     }
 
@@ -160,10 +159,7 @@ contract BondPool is Ownable {
         require(claimableRewards > 0, "No rewards to claim");
         bond.claimableReward = 0;
         totalClaimableRewards -= claimableRewards;
-        StakeManager(stakeManager).updateAbsTotalClaimableRewards(
-            claimableRewards,
-            true
-        );
+        stakeManager.updateAbsTotalClaimableRewards(claimableRewards, true);
         daoToken.mint(msg.sender, claimableRewards);
         emit RewardClaimed(msg.sender, claimableRewards);
     }
@@ -176,77 +172,45 @@ contract BondPool is Ownable {
         emit CompoundStatusSwitched(msg.sender, bondIndex, bond.isCompound);
     }
 
-    function calculateWeightedTime(
-        uint256 lockDuration,
-        uint256 absMaxRemainDuration
+    function calculateWeight(
+        uint256 amount,
+        uint256 lockDuration
     ) internal view returns (uint256) {
-        uint256 remainingDuration = block.timestamp +
-            lockDuration -
-            block.timestamp;
-        if (remainingDuration < 0) {
-            remainingDuration = 1 days;
+        uint256 end_date = block.timestamp + lockDuration * 7 * 24 * 60 * 60; // convert weeks to seconds
+        uint256 remaining_duration = end_date - block.timestamp;
+        if (remaining_duration < 0) {
+            remaining_duration = 1; // 1 second
         }
-        return (remainingDuration * 1e18) / absMaxRemainDuration;
-    }
-
-    function calculateTotalWeightedStake(
-        uint256 absMaxRemainDuration
-    ) internal view returns (uint256) {
-        uint256 totalWeightedStake = 0;
-        for (uint256 i = 0; i < bonds.length; i++) {
-            totalWeightedStake +=
-                bonds[i].amount *
-                calculateWeightedTime(
-                    bonds[i].lockDuration,
-                    absMaxRemainDuration
-                );
-        }
-        return totalWeightedStake;
-    }
-
-    function updateTotalBondWeight(uint256 oldWeight) internal {
-        totalWeight = calculateTotalWeightedStake(
-            StakeManager(stakeManager).getAbsMaxRemainDuration()
-        );
-        StakeManager(stakeManager).updateAbsTotalBondWeight(
-            oldWeight,
-            totalWeight
-        );
+        return
+            (amount *
+                uint256(keccak256(abi.encodePacked(remaining_duration)))) %
+            1e18;
     }
 
     function updateReward(
         uint256 daoRewards,
-        uint256 totalStakedAmount,
-        uint256 absMaxRemainDuration
+        uint256 absTotalWeight
     ) external onlyStakeManager returns (uint256) {
         uint256 claimableRewardAmount = 0;
-        uint256 totalWeightedStake = calculateTotalWeightedStake(
-            absMaxRemainDuration
-        );
-
         for (uint256 i = 0; i < bonds.length; i++) {
             Bond storage bond = bonds[i];
-            uint256 bondWeightedShare = (calculateWeightedTime(
-                bond.lockDuration,
-                absMaxRemainDuration
-            ) * daoRewards) / totalWeightedStake;
+            uint256 bondWeight = calculateWeight(
+                bond.amount,
+                bond.lockDuration
+            );
+            uint256 bondWeightNormalized = bondWeight / absTotalWeight;
+            uint256 bondReward = bondWeightNormalized * daoRewards;
             if (bond.isCompound) {
-                bond.amount += bondWeightedShare;
-                bond.earnings += bondWeightedShare;
-                totalEarnings += bondWeightedShare;
-                totalStaked += bondWeightedShare;
-                StakeManager(stakeManager).updateAbsTotalStaked(
-                    bondWeightedShare,
-                    true
-                );
+                bond.amount += bondReward;
+                totalStaked += bondReward;
+                stakeManager.updateAbsTotalStaked(bondReward, true);
             } else {
-                bond.claimableReward += bondWeightedShare;
-                bond.earnings += bondWeightedShare;
-                totalEarnings += bondWeightedShare;
-                claimableRewardAmount += bondWeightedShare;
+                bond.claimableReward += bondReward;
+                totalClaimableRewards += bondReward;
             }
+            bond.earnings += bondReward;
+            totalEarnings += bondReward;
         }
-        totalClaimableRewards += claimableRewardAmount;
         emit RewardUpdated(owner(), claimableRewardAmount);
         return claimableRewardAmount;
     }

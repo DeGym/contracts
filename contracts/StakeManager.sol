@@ -19,7 +19,7 @@ contract StakeManager is Ownable {
     event AbsStakeUpdated(address indexed stakeholder, uint256 newTotalStaked);
     event RewardsUpdated(uint256 absTotalClaimableRewards);
     event MaxRemainDurationUpdated(uint256 maxStartTime, uint256 maxDuration);
-    event AbsTotalBondWeightUpdated(uint256 oldWeight, uint256 newWeight);
+    event AbsTotalBondWeightUpdated(uint256 newWeight);
 
     constructor(address _daoToken) {
         daoToken = IERC20(_daoToken);
@@ -49,12 +49,12 @@ contract StakeManager is Ownable {
     }
 
     function updateRewards(uint256 daoRewards) external onlyOwner {
-        uint256 absMaxRemainDuration = getAbsMaxRemainDuration();
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
-            uint256 rewardAmount = BondPool(bondPools[stakeholder])
-                .updateReward(daoRewards, absTotalStaked, absMaxRemainDuration);
-            absTotalClaimableRewards += rewardAmount;
+            BondPool(bondPools[stakeholder]).updateReward(
+                daoRewards,
+                absTotalBondWeight
+            );
         }
         emit RewardsUpdated(absTotalClaimableRewards);
     }
@@ -69,6 +69,11 @@ contract StakeManager is Ownable {
             absTotalStaked -= amount;
         }
         emit AbsStakeUpdated(msg.sender, absTotalStaked);
+    }
+
+    function updateAbsTotalBondWeight(int256 weight) external onlyBondPool {
+        absTotalBondWeight += weight;
+        emit AbsTotalBondWeightUpdated(absTotalBondWeight);
     }
 
     function updateAbsTotalClaimableRewards(
@@ -105,26 +110,7 @@ contract StakeManager is Ownable {
         }
     }
 
-    function updateAbsTotalClaimableRewards(
-        uint256 amount,
-        bool isAdding
-    ) external onlyBondPool {
-        if (isAdding) {
-            absTotalClaimableRewards += amount;
-        } else {
-            absTotalClaimableRewards -= amount;
-        }
-    }
-
-    function updateAbsTotalBondWeight(
-        uint256 oldWeight,
-        uint256 newWeight
-    ) external onlyBondPool {
-        absTotalBondWeight = absTotalBondWeight - oldWeight + newWeight;
-        emit AbsTotalBondWeightUpdated(oldWeight, newWeight);
-    }
-
     function getAbsMaxRemainDuration() public view returns (uint256) {
-        return maxDuration - (block.timestamp - maxStartTime);
+        return maxDuration * 7 * 24 * 60 * 60; // convert weeks to seconds
     }
 }
