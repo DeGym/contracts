@@ -58,35 +58,44 @@ This system consists of six primary smart contracts that handle the management o
   - `GymRemoved`: Emitted when a gym is removed.
 
 ### StakeManager.sol
-- **Purpose**: Manages the deployment of user-specific stake pools and staking parameters.
+- **Purpose**: Manages the deployment of stakeholder-specific bond pools and staking parameters.
 - **Key Functions**:
-  - `deployStakePool`: Deploys a user-specific stake pool contract.
-  - `getStakePool`: Retrieves the address of a user-specific stake pool.
-  - `distributeRewards`: Distributes rewards based on calculated inflation.
-  - `addSupportedFiatToken`: Adds a supported fiat token for reward distribution.
-  - `updateTotalStaked`: Updates the total staked amount.
-  - `getTotalLockedDGYM`: Retrieves the total amount of locked DGYM tokens.
-  - `getTotalUnlockedDGYM`: Retrieves the total amount of unlocked DGYM tokens.
+  - `deployBondPool`: Deploys a stakeholder-specific bond pool contract.
+  - `getBondPool`: Retrieves the address of a stakeholder-specific bond pool.
+  - `updateRewards`: Distributes rewards based on the total weight of all bonds.
+  - `updateAbsTotalStaked`: Updates the total staked amount across all bond pools.
+  - `updateAbsTotalBondWeight`: Updates the total weight of all bonds across all bond pools.
+  - `updateAbsTotalClaimableRewards`: Updates the total claimable rewards across all bond pools.
+  - `updateMaxDuration`: Updates the maximum duration for staking.
+  - `updateAbsTotalEarnings`: Updates the total earnings across all bond pools.
+  - `getAbsMaxRemainDuration`: Retrieves the maximum remaining duration for staking.
 - **Key Events**:
-  - `StakePoolDeployed`: Emitted when a user-specific stake pool is deployed.
-  - `StakeUpdated`: Emitted when the total staked amount is updated.
+  - `BondPoolDeployed`: Emitted when a user-specific stake pool is deployed.
+  - `AbsStakeUpdated`: Emitted when the total staked amount is updated.
+  - `RewardsUpdated`: Emitted when rewards are distributed.
+  - `MaxRemainDurationUpdated`: Emitted when the maximum remaining duration is updated.
+  - `AbsTotalBondWeightUpdated`: Emitted when the total bond weight is updated.
 
-### StakePool.sol
-- **Purpose**: Manages the staking and reward distribution for a specific user.
+
+### BoolPool.sol
+- **Purpose**: Manages the staking and reward distribution for a specific stakeholder.
 - **Key Functions**:
-  - `stake`: Allows the user to stake DGYM tokens with a specified lock duration and compound setting.
-  - `unstake`: Allows the user to unstake their tokens after the lock duration has passed.
-  - `receiveRewards`: Receives rewards from the StakeManager.
-  - `increaseStakeAmount`: Increasese the stake amount.
-  - `extendLockDuration`: Extends the lock duration of an existing stake.
-  - `calculateTotalStakedDuration`: Calculates the total weighted duration of staked tokens.
-  - `calculateRewards`: Calculates the rewards based on the staked amount and lock duration.
+  - `bond`: Allows the user to create a new bond with a specified amount, lock duration, and compound setting.
+  - `unbond`: Allows the user to unbond their tokens after the lock duration has passed.
+  - `increaseBondAmount`: Increases the amount of an existing bond.
+  - `extendLockDuration`: Extends the lock duration of an existing bond.
+  - `claimRewards`: Claims the rewards for a specific bond.
+  - `switchCompoundStatus`: Switches the compound status of a specific bond.
+  - `calculateWeight`: Calculates the weight of a bond based on the amount and lock duration.
+  - `updateReward`: Updates the reward distribution for all bonds in the pool.
 - **Key Events**:
-  - `Staked`: Emitted when DGYM tokens are staked.
-  - `Unstaked`: Emitted when DGYM tokens are unstaked.
-  - `RewardDistributed`: Emitted when rewards are distributed.
-  - `FiatRewardDistributed`: Emitted when fiat rewards are distributed.
-  - `StakeAmountAdded`: Emitted when more DGYM is added to an existing stake.
+  - `Bonded`: Emitted when a new bond is created.
+  - `Unbonded`: Emitted when a bond is unbonded.
+  - `RewardUpdated`: Emitted when rewards are updated.
+  - `RewardClaimed`: Emitted when rewards are claimed.
+  - `BondAmountIncreased`: Emitted when the amount of a bond is increased.
+  - `LockDurationExtended`: Emitted when the lock duration of a bond is extended.
+  - `CompoundStatusSwitched`: Emitted when the compound status of a bond is switched.
 
 ### Treasury.sol
 - **Purpose**: Manages the distribution of multiple fiat tokens and DGYM inflation.
