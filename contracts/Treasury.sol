@@ -23,13 +23,16 @@ contract Treasury is Ownable {
     }
 
     function calculateRewards() external onlyOwner {
-        uint256 unclaimedRewards = stakeManager.absTotalClaimableRewards();
+        uint256 claimableRewards = stakeManager
+            .absTotalClaimableRewards();
         uint256 currentSupply = daoToken.currentSupply();
         uint256 maxSupply = daoToken.maxSupply();
 
         uint256 inflationRate = (decayConstant *
-            (maxSupply - (currentSupply + unclaimedRewards))) / maxSupply;
-        uint256 daoRewards = (currentSupply + unclaimedRewards) * inflationRate;
+            (maxSupply - (currentSupply + claimableRewards))) /
+            maxSupply;
+        uint256 daoRewards = (currentSupply + claimableRewards) *
+            inflationRate;
 
         stakeManager.updateRewards(daoRewards);
         emit RewardsCalculated(daoRewards);
