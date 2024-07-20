@@ -1,64 +1,63 @@
 import pytest
 
 
-def test_deploy_stake_pool(stake_manager, stakeholder):
-    tx = stake_manager.deployUserStakePool({'from': stakeholder})
+def test_deploy_bond_pool(stake_manager, stakeholder):
+    tx = stake_manager.deployBondPool({"from": stakeholder})
     tx.wait()
-    stake_pool_address = stake_manager.stakePools(stakeholder)
-    assert stake_pool_address != '0x0000000000000000000000000000000000000000'
+    bond_pool_address = stake_manager.getBondPool(stakeholder)
+    assert bond_pool_address != "0x0000000000000000000000000000000000000000"
 
 
-def test_stake_tokens(stake_pool, stakeholder, token):
-    initial_balance = token.balanceOf(stakeholder)
-    stake_amount = 1000
-    token.approve(stake_pool.address, stake_amount, {"from": stakeholder})
-    tx = stake_pool.stake(stake_amount, 30, False, {"from": stakeholder})
+def test_bond_tokens(bond_pool, stakeholder, dgym_token):
+    initial_balance = dgym_token.balanceOf(stakeholder)
+    bond_amount = 1000
+    dgym_token.approve(bond_pool.address, bond_amount, {"from": stakeholder})
+    tx = bond_pool.bond(bond_amount, 30, False, {"from": stakeholder})
     tx.wait()
-    assert token.balanceOf(stakeholder) == initial_balance - stake_amount
-    assert stake_pool.totalStaked() == stake_amount
+    assert dgym_token.balanceOf(stakeholder) == initial_balance - bond_amount
+    assert bond_pool.totalStaked() == bond_amount
 
 
-# TODO
-def test_unstake_tokens(stake_pool, stakeholder, token):
-    stake_amount = 1000
-    token.approve(stake_pool.address, stake_amount, {"from": stakeholder})
-    stake_pool.stake(stake_amount, 1, False, {"from": stakeholder})
+def test_unbond_tokens(bond_pool, stakeholder, dgym_token, chain):
+    bond_amount = 1000
+    dgym_token.approve(bond_pool.address, bond_amount, {"from": stakeholder})
+    bond_pool.bond(bond_amount, 1, False, {"from": stakeholder})
     chain.sleep(60 * 60 * 24 * 2)  # Fast forward time by 2 days
-    initial_balance = token.balanceOf(stakeholder)
-    stake_pool.unstake(0, {"from": stakeholder})
-    assert token.balanceOf(stakeholder) == initial_balance + stake_amount
-    assert stake_pool.totalStaked() == 0
+    initial_balance = dgym_token.balanceOf(stakeholder)
+    bond_pool.unbond(0, {"from": stakeholder})
+    assert dgym_token.balanceOf(stakeholder) == initial_balance + bond_amount
+    assert bond_pool.totalStaked() == 0
 
 
-def test_receive_rewards(stake_pool, stakeholder, token, deployer):
+def test_receive_rewards(bond_pool, stakeholder, dgym_token, deployer):
     reward_amount = 500
-    token.transfer(stake_pool.address, reward_amount, {"from": deployer})
-    initial_balance = token.balanceOf(stakeholder)
-    stake_pool.receiveRewards(reward_amount, {"from": deployer})
-    assert token.balanceOf(stake_pool.address) == reward_amount
-    stake_pool.claimDGYMRewards({"from": stakeholder})
-    assert token.balanceOf(stakeholder) == initial_balance + reward_amount
+    dgym_token.transfer(bond_pool.address, reward_amount, {"from": deployer})
+    initial_balance = dgym_token.balanceOf(stakeholder)
+    bond_pool.updateReward(reward_amount, {"from": deployer})
+    assert dgym_token.balanceOf(bond_pool.address) == reward_amount
+    bond_pool.claimRewards(0, {"from": stakeholder})
+    assert dgym_token.balanceOf(stakeholder) == initial_balance + reward_amount
 
 
-def test_claim_dgym_rewards(stake_pool, stakeholder, token, deployer):
+def test_claim_dgym_rewards(bond_pool, stakeholder, dgym_token, deployer):
     reward_amount = 500
-    token.transfer(stake_pool.address, reward_amount, {"from": deployer})
-    stake_pool.receiveRewards(reward_amount, {"from": deployer})
-    initial_balance = token.balanceOf(stakeholder)
-    stake_pool.claimDGYMRewards({"from": stakeholder})
-    assert token.balanceOf(stakeholder) == initial_balance + reward_amount
+    dgym_token.transfer(bond_pool.address, reward_amount, {"from": deployer})
+    bond_pool.updateReward(reward_amount, {"from": deployer})
+    initial_balance = dgym_token.balanceOf(stakeholder)
+    bond_pool.claimRewards(0, {"from": stakeholder})
+    assert dgym_token.balanceOf(stakeholder) == initial_balance + reward_amount
 
 
-def test_calculate_total_staked_duration(stake_pool, stakeholder, token):
-    token.approve(stake_pool.address, 1000, {"from": stakeholder})
-    stake_pool.stake(500, 10, False, {"from": stakeholder})
-    stake_pool.stake(500, 20, False, {"from": stakeholder})
-    assert stake_pool.calculateTotalStakedDuration() == 15
+def test_calculate_total_staked_duration(bond_pool, stakeholder, dgym_token):
+    dgym_token.approve(bond_pool.address, 1000, {"from": stakeholder})
+    bond_pool.bond(500, 10, False, {"from": stakeholder})
+    bond_pool.bond(500, 20, False, {"from": stakeholder})
+    assert bond_pool.totalWeight() > 0  # total weight should be greater than zero
 
 
-def test_calculate_rewards(stake_pool, stakeholder, token):
-    token.approve(stake_pool.address, 1000, {"from": stakeholder})
-    stake_pool.stake(500, 10, False, {"from": stakeholder})
-    stake_pool.stake(500, 20, False, {"from": stakeholder})
-    total_rewards = stake_pool.calculateRewards()
+def test_calculate_rewards(bond_pool, stakeholder, dgym_token):
+    dgym_token.approve(bond_pool.address, 1000, {"from": stakeholder})
+    bond_pool.bond(500, 10, False, {"from": stakeholder})
+    bond_pool.bond(500, 20, False, {"from": stakeholder})
+    total_rewards = bond_pool.totalEarnings()
     assert total_rewards > 0

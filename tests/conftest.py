@@ -36,7 +36,7 @@ def gym():
 
 @pytest.fixture
 def dgym_token(Contract, deployer):
-    return __get(Contract, "DGYM_ADDRESS", deployer, project.Token, 1000000)
+    return __get(Contract, "DGYM_ADDRESS", deployer, project.Token)
 
 
 @pytest.fixture
@@ -67,15 +67,17 @@ def stake_manager(Contract, deployer, dgym_token):
 
 
 @pytest.fixture
-def stake_pool(Contract, deployer, dgym_token, fiat_token):
-    return __get(
+def bond_pool(Contract, deployer, dgym_token, stake_manager):
+    bond_pool_contract = __get(
         Contract,
-        "STAKE_POOL_ADDRESS",
+        "BOND_POOL_ADDRESS",
         deployer,
-        project.UserStakePool,
-        dgym_token.address,
-        fiat_token.address,
+        project.BondPool,
+        deployer.address,
+        stake_manager.address,
     )
+    stake_manager.deployBondPool({"from": deployer})
+    return bond_pool_contract
 
 
 @pytest.fixture
