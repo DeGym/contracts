@@ -10,38 +10,44 @@ def __get(Contract, key, deployer, contract, *args, **kwargs):
     return contract
 
 
+def __generate_account():
+    return accounts.test_accounts.generate_test_account()
+
+
 @pytest.fixture
 def deployer():
     address = os.environ.get("DEPLOYER_ADDRESS")
-    return accounts[address] if address else accounts[0]
+    return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def costumer():
     address = os.environ.get("COSTUMER_ADDRESS")
-    return accounts[address] if address else accounts[1]
+    return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def stakeholder():
     address = os.environ.get("STAKEHOLDER_ADDRESS")
-    return accounts[address] if address else accounts[1]
+    return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def gym():
     address = os.environ.get("GYM_ADDRESS")
-    return accounts[address] if address else accounts[2]
+    return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def dgym_token(Contract, deployer):
-    return __get(Contract, "DGYM_ADDRESS", deployer, project.Token)
+    return __get(Contract, "DGYM_ADDRESS", deployer, project.DeGymToken)
 
 
 @pytest.fixture
 def fiat_token(Contract, deployer):
-    return __get(Contract, "USDT_ADDRESS", deployer, project.Token, 1000000)
+    return __get(
+        Contract, "USDT_ADDRESS", deployer, project.DeGymToken, 1000000
+    )  # Any stable coin
 
 
 @pytest.fixture
@@ -110,21 +116,46 @@ def treasury(Contract, deployer):
 
 
 @pytest.fixture
-def governance(
+def vesting(Contract, deployer):
+    return __get(
+        Contract,
+        "VESTING_ADDRESS",
+        deployer,
+        project.Vesting,
+    )
+
+
+@pytest.fixture
+def sale_contract(Contract, deployer, dgym_token, vesting):
+    return __get(
+        Contract,
+        "SALE_CONTRACT_ADDRESS",
+        deployer,
+        project.SaleContract,
+        dgym_token.address,
+        vesting.address,
+    )
+
+
+@pytest.fixture
+def governor(
     Contract,
     deployer,
-    treasury,
-    voucher_manager,
     gym_manager,
     stake_manager,
+    treasury,
+    dgym_token,
+    voucher_manager,
+    vesting,
 ):
     return __get(
         Contract,
-        "GOVERNANCE_ADDRESS",
+        "GOVERNOR_ADDRESS",
         deployer,
-        project.Governance,
-        treasury.address,
-        voucher_manager.address,
+        project.DeGymGovernor,
         gym_manager.address,
         stake_manager.address,
+        treasury.address,
+        dgym_token.address,
+        voucher_manager.address,
     )
