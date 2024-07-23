@@ -3,12 +3,11 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeManager.sol";
-import "./Token.sol";
 
 contract Treasury is Ownable {
     StakeManager public stakeManager;
     uint256 public decayConstant;
-    Token public daoToken;
+    IERC20 public daoToken;
 
     event RewardsCalculated(uint256 daoRewards);
 
@@ -23,16 +22,13 @@ contract Treasury is Ownable {
     }
 
     function calculateRewards() external onlyOwner {
-        uint256 claimableRewards = stakeManager
-            .absTotalClaimableRewards();
+        uint256 claimableRewards = stakeManager.absTotalClaimableRewards();
         uint256 currentSupply = daoToken.currentSupply();
         uint256 maxSupply = daoToken.maxSupply();
 
         uint256 inflationRate = (decayConstant *
-            (maxSupply - (currentSupply + claimableRewards))) /
-            maxSupply;
-        uint256 daoRewards = (currentSupply + claimableRewards) *
-            inflationRate;
+            (maxSupply - (currentSupply + claimableRewards))) / maxSupply;
+        uint256 daoRewards = (currentSupply + claimableRewards) * inflationRate;
 
         stakeManager.updateRewards(daoRewards);
         emit RewardsCalculated(daoRewards);
