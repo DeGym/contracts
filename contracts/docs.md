@@ -1,4 +1,4 @@
-### DeGym Smart Contract System V2
+### DeGym Smart Contract System
 
 This document provides a comprehensive overview of the smart contract system and the reward program in DeGym. It highlights the key improvements made in version 2, the modular structure of the contracts, and the inflation mechanism used to calculate rewards. The UML diagram provides a visual representation of the relationships between the contracts, making it easier to understand the system's architecture.
 
