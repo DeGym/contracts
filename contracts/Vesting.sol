@@ -5,44 +5,56 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Vesting is Ownable {
+    struct VestingSchedule {
+        uint256 totalAmount;
+        uint256 releasedAmount;
+        uint256 start;
+        uint256 duration;
+    }
+
     IERC20 public token;
-    uint256 public start;
-    uint256 public duration;
-    mapping(address => uint256) public released;
-    mapping(address => uint256) public allocations;
+    mapping(address => VestingSchedule) public vestingSchedules;
 
-    event TokensReleased(address beneficiary, uint256 amount);
-    event TokensAllocated(address beneficiary, uint256 amount);
-
-    constructor(IERC20 _token, uint256 _start, uint256 _duration) {
+    constructor(IERC20 _token) {
         token = _token;
-        start = _start;
-        duration = _duration;
     }
 
-    function allocateTokens(address beneficiary, uint256 amount) external onlyOwner {
-        allocations[beneficiary] = amount;
-        emit TokensAllocated(beneficiary, amount);
+    function setVesting(
+        address beneficiary,
+        uint256 totalAmount,
+        uint256 start,
+        uint256 duration
+    ) external onlyOwner {
+        vestingSchedules[beneficiary] = VestingSchedule({
+            totalAmount: totalAmount,
+            releasedAmount: 0,
+            start: start,
+            duration: duration
+        });
     }
 
-    function releaseTokens(address beneficiary) external {
-        require(block.timestamp >= start, "Vesting not started yet");
-        uint256 vestedAmount = vestedTokens(beneficiary);
-        uint256 unreleased = vestedAmount - released[beneficiary];
-        require(unreleased > 0, "No tokens to release");
+    function release() external {
+        VestingSchedule storage schedule = vestingSchedules[msg.sender];
+        uint256 vestedAmount = _vestedAmount(schedule);
+        uint256 unreleasedAmount = vestedAmount - schedule.releasedAmount;
 
-        released[beneficiary] += unreleased;
-        token.transfer(beneficiary, unreleased);
-        emit TokensReleased(beneficiary, unreleased);
+        require(unreleasedAmount > 0, "No tokens to release");
+
+        schedule.releasedAmount = vestedAmount;
+        token.transfer(msg.sender, unreleasedAmount);
     }
 
-    function vestedTokens(address beneficiary) public view returns (uint256) {
-        if (block.timestamp < start) {
+    function _vestedAmount(
+        VestingSchedule memory schedule
+    ) internal view returns (uint256) {
+        if (block.timestamp < schedule.start) {
             return 0;
-        } else if (block.timestamp >= start + duration) {
-            return allocations[beneficiary];
+        } else if (block.timestamp >= schedule.start + schedule.duration) {
+            return schedule.totalAmount;
         } else {
-            return (allocations[beneficiary] * (block.timestamp - start)) / duration;
+            return
+                (schedule.totalAmount * (block.timestamp - schedule.start)) /
+                schedule.duration;
         }
     }
 }
