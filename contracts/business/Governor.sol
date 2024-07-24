@@ -8,12 +8,12 @@ import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../managers/VoucherManager.sol";
-import "../managers/GymManager.sol";
-import "../managers/StakeManager.sol";
-import "../utilities/Treasury.sol";
-import "../utilities/Token.sol";
-import "../utilities/Vesting.sol";
+import "./managers/VoucherManager.sol";
+import "./managers/GymManager.sol";
+import "./managers/StakeManager.sol";
+import "./Treasury.sol";
+import "./Token.sol";
+import "./utilities/Vesting.sol";
 
 contract DeGymGovernor is
     Governor,

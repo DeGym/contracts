@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./Token.sol";
-import "./StakeManager.sol";
+import "../Token.sol";
+import "../managers/StakeManager.sol";
 
 contract BondPool is Ownable {
     Token public daoToken;

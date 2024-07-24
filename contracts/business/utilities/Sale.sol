@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./Governor.sol";
+import "../Governor.sol";
 
 contract Sale is Ownable {
     Governor public governor;
