@@ -1,9 +1,14 @@
-import pytest, os
+import pytest
+import os
 from ape import project, accounts
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 def __get(Contract, key, deployer, contract, *args, **kwargs):
-    address = os.environ.get(key)
+    address = os.getenv(key)
     contract = (
         Contract[address] if address else deployer.deploy(contract, *args, **kwargs)
     )
@@ -16,25 +21,25 @@ def __generate_account():
 
 @pytest.fixture
 def deployer():
-    address = os.environ.get("DEPLOYER_ADDRESS")
+    address = os.getenv("DEPLOYER_ADDRESS")
     return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def costumer():
-    address = os.environ.get("COSTUMER_ADDRESS")
+    address = os.getenv("COSTUMER_ADDRESS")
     return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def stakeholder():
-    address = os.environ.get("STAKEHOLDER_ADDRESS")
+    address = os.getenv("STAKEHOLDER_ADDRESS")
     return accounts[address] if address else __generate_account()
 
 
 @pytest.fixture
 def gym():
-    address = os.environ.get("GYM_ADDRESS")
+    address = os.getenv("GYM_ADDRESS")
     return accounts[address] if address else __generate_account()
 
 
