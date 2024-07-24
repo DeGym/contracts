@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/governance/Governor.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {IGovernor, Governor} from "@openzeppelin/contracts/governance/Governor.sol";
+import {GovernorCountingSimple} from "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
+import {GovernorVotes} from "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
+import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
+import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import "./managers/VoucherManager.sol";
 import "./managers/GymManager.sol";
 import "./managers/StakeManager.sol";
@@ -17,12 +18,10 @@ import "./utilities/Vesting.sol";
 
 contract DeGymGovernor is
     Governor,
-    GovernorSettings,
     GovernorCountingSimple,
     GovernorVotes,
     GovernorVotesQuorumFraction,
-    GovernorTimelockControl,
-    Ownable
+    GovernorTimelockControl
 {
     GymManager public gymManager;
     StakeManager public stakeManager;
@@ -44,18 +43,16 @@ contract DeGymGovernor is
 
     constructor(
         IVotes _token,
-        TimelockController _timelock,
+        TimelockController _timelock
         address _gymManager,
         address _stakeManager,
         address _treasury,
-        address _daoToken,
         address _vesting
     )
-        Governor("DeGymGovernor")
-        GovernorSettings(1 /* 1 block */, 45818 /* 1 week */, 1e18)
-        GovernorVotes(_token)
-        GovernorVotesQuorumFraction(4)
-        GovernorTimelockControl(_timelock)
+        Governor("MyGovernor") 
+        GovernorVotes(_token) 
+        GovernorVotesQuorumFraction(4) 
+        GovernorTimelockControl(_timelock) 
     {
         gymManager = GymManager(_gymManager);
         stakeManager = StakeManager(_stakeManager);
@@ -63,6 +60,19 @@ contract DeGymGovernor is
         daoToken = DeGymToken(_daoToken);
         vesting = Vesting(_vesting);
     }
+
+    function votingDelay() public pure override returns (uint256) {
+        return 7200; // 1 day
+    }
+
+    function votingPeriod() public pure override returns (uint256) {
+        return 50400; // 1 week
+    }
+
+    function proposalThreshold() public pure override returns (uint256) {
+        return 0;
+    }
+
 
     function changeListingFactor(uint256 newListingFactor) external onlyOwner {
         gymManager.setListingFactor(newListingFactor);
@@ -100,98 +110,58 @@ contract DeGymGovernor is
             msg.sender == saleContract,
             "Only sale contract can distribute tokens"
         );
-        daoToken.mint(address(vesting), amount);
+        token.mint(address(vesting), amount);
         vesting.setVesting(beneficiary, amount, block.timestamp, 365 days);
         emit TokensDistributed(beneficiary, amount);
     }
 
     function burnUnsoldTokens(uint256 amount) external onlyOwner {
-        daoToken.burn(amount);
+        token.burn(amount);
         emit UnsoldTokensBurned(amount);
     }
 
-    // The following functions are overrides required by Solidity.
-    function votingDelay()
-        public
-        view
-        override(IGovernor, GovernorSettings)
-        returns (uint256)
-    {
-        return super.votingDelay();
-    }
+    // The functions below are overrides required by Solidity.
 
-    function votingPeriod()
-        public
-        view
-        override(IGovernor, GovernorSettings)
-        returns (uint256)
-    {
-        return super.votingPeriod();
-    }
-
-    function quorum(
-        uint256 blockNumber
-    )
-        public
-        view
-        override(IGovernor, GovernorVotesQuorumFraction)
-        returns (uint256)
-    {
-        return super.quorum(blockNumber);
-    }
-
-    function state(
-        uint256 proposalId
-    )
-        public
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (ProposalState)
-    {
+    function state(uint256 proposalId) public view override(Governor, GovernorTimelockControl) returns (ProposalState) {
         return super.state(proposalId);
     }
 
-    function propose(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
-    ) public override(Governor, IGovernor) returns (uint256) {
-        return super.propose(targets, values, calldatas, description);
+    function proposalNeedsQueuing(
+        uint256 proposalId
+    ) public view virtual override(Governor, GovernorTimelockControl) returns (bool) {
+        return super.proposalNeedsQueuing(proposalId);
     }
 
-    function execute(
+    function _queueOperations(
+        uint256 proposalId,
         address[] memory targets,
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
-    )
-        public
-        payable
-        override(Governor, GovernorTimelockControl)
-        returns (uint256)
-    {
-        return super.execute(targets, values, calldatas, descriptionHash);
+    ) internal override(Governor, GovernorTimelockControl) returns (uint48) {
+        return super._queueOperations(proposalId, targets, values, calldatas, descriptionHash);
     }
 
-    function cancel(
-        bytes32 id
-    ) public override(GovernorTimelockControl) returns (uint256) {
-        return super.cancel(id);
+    function _executeOperations(
+        uint256 proposalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) {
+        super._executeOperations(proposalId, targets, values, calldatas, descriptionHash);
     }
 
-    function _executor()
-        internal
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (address)
-    {
+    function _cancel(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) returns (uint256) {
+        return super._cancel(targets, values, calldatas, descriptionHash);
+    }
+
+    function _executor() internal view override(Governor, GovernorTimelockControl) returns (address) {
         return super._executor();
-    }
-
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view override(Governor, GovernorTimelockControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
     }
 }
