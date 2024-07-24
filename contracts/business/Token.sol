@@ -10,7 +10,11 @@ contract DeGymToken is ERC20, ERC20Capped, ERC20Permit, ERC20Votes {
     constructor(
         uint256 _maxSupply,
         uint256 _initialSupply
-    ) ERC20("DeGym Token", "DGYM") ERC20Capped(_maxSupply * 10 ** decimals()) {
+    )
+        ERC20("DeGym Token", "DGYM")
+        ERC20Capped(_maxSupply * 10 ** decimals())
+        ERC20Permit("DeGym Token")
+    {
         require(
             _initialSupply <= _maxSupply,
             "Initial supply cannot exceed max supply"
