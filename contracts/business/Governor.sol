@@ -49,7 +49,7 @@ contract DeGymGovernor is
         address _treasury,
         address _vesting
     )
-        Governor("MyGovernor") 
+        Governor("DeGym Governor") 
         GovernorVotes(_token) 
         GovernorVotesQuorumFraction(4) 
         GovernorTimelockControl(_timelock) 
