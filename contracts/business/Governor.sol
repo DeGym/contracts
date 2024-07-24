@@ -27,7 +27,7 @@ contract DeGymGovernor is
     GymManager public gymManager;
     StakeManager public stakeManager;
     Treasury public treasury;
-    Token public daoToken;
+    DeGymToken public daoToken;
     Vesting public vesting;
     address public saleContract;
 
@@ -60,7 +60,7 @@ contract DeGymGovernor is
         gymManager = GymManager(_gymManager);
         stakeManager = StakeManager(_stakeManager);
         treasury = Treasury(_treasury);
-        daoToken = Token(_daoToken);
+        daoToken = DeGymToken(_daoToken);
         vesting = Vesting(_vesting);
     }
 

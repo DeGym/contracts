@@ -3,3 +3,4 @@ __pycache__
 drafts
 TODO.md
 .env
+node_modules
