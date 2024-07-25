@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/manager/AccessManaged.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract DeGymToken is ERC20, ERC20Burnable, AccessManaged, ERC20Permit {
     uint256 private _cap;
@@ -13,16 +14,16 @@ contract DeGymToken is ERC20, ERC20Burnable, AccessManaged, ERC20Permit {
     event CapUpdated(uint256 newCap);
 
     constructor(
-        address initialAuthority,
+        uint256 initialSupply,
         uint256 initialCap
     )
         ERC20("DeGymToken", "DGYM")
-        AccessManaged(initialAuthority)
+        AccessManaged(msg.sender)
         ERC20Permit("DeGymToken")
     {
         require(initialCap > 0, "ERC20Capped: cap is 0");
         _cap = initialCap * (10 ** decimals());
-        _mint(msg.sender, 1000000000 * 10 ** decimals());
+        _mint(msg.sender, initialSupply * 10 ** decimals());
     }
 
     function cap() public view returns (uint256) {
@@ -54,4 +55,38 @@ contract DeGymToken is ERC20, ERC20Burnable, AccessManaged, ERC20Permit {
     ) internal override(ERC20) {
         super._update(from, to, value);
     }
+}
+
+interface IDeGymToken is IERC20 {
+    event CapUpdated(uint256 newCap);
+
+    function burn(uint256 amount) external;
+
+    function burnFrom(address account, uint256 amount) external;
+
+    function mint(address to, uint256 amount) external;
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    function cap() external view returns (uint256);
+
+    // setAuthority
+
+    function setCap(uint256 newCap) external;
+
+    // authority
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
 }
