@@ -11,6 +11,7 @@ contract DeGymTimeCrowdsale is Ownable {
 
     IDeGymToken public token;
     address public wallet;
+    string[] public phaseNames;
 
     struct Phase {
         uint256 rate;
@@ -32,7 +33,10 @@ contract DeGymTimeCrowdsale is Ownable {
     );
     event PhaseEnded(string phaseName, uint256 unsoldTokensBurned);
 
-    constructor(address tokenAddress, address walletAddress) {
+    constructor(
+        address tokenAddress,
+        address walletAddress
+    ) Ownable(walletAddress) {
         token = IDeGymToken(tokenAddress);
         wallet = walletAddress;
     }
@@ -64,6 +68,7 @@ contract DeGymTimeCrowdsale is Ownable {
             endTime: endTime,
             active: false
         });
+        phaseNames.push(phaseName); // Add phase name to the list
     }
 
     function activatePhase(string memory phaseName) external onlyOwner {
@@ -112,7 +117,7 @@ contract DeGymTimeCrowdsale is Ownable {
 
         phase.sold += tokens;
 
-        token.safeTransfer(beneficiary, tokens);
+        IERC20(address(token)).safeTransfer(beneficiary, tokens); // Using SafeERC20 library explicitly
         emit TokensPurchased(beneficiary, weiAmount, tokens);
 
         payable(wallet).transfer(weiAmount);
@@ -153,7 +158,10 @@ contract DeGymTimeCrowdsale is Ownable {
             vestingWallets[beneficiary] != address(0),
             "Vesting wallet does not exist for beneficiary"
         );
-        token.safeTransfer(vestingWallets[beneficiary], amount);
+        IERC20(address(token)).safeTransfer(
+            vestingWallets[beneficiary],
+            amount
+        ); // Using SafeERC20 library explicitly
     }
 
     function withdrawTokens(IERC20 tokenAddress) external onlyOwner {
