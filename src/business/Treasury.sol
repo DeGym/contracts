@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./managers/StakeManager.sol";
+import "./staking/StakeManager.sol";
 
 contract Treasury is Ownable {
     StakeManager public stakeManager;

@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../managers/GymManager.sol";
-import "../managers/VoucherManager.sol";
-import "../managers/StakeManager.sol";
+import "../provider/GymManager.sol";
+import "../consumer/VoucherManager.sol";
+import "../staking/StakeManager.sol";
 
 contract Checkin is Ownable {
     GymManager public gymManager;

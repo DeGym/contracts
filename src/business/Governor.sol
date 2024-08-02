@@ -9,11 +9,11 @@ import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extens
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
-import "./managers/VoucherManager.sol";
-import "./managers/GymManager.sol";
-import "./managers/StakeManager.sol";
+import "./consumer/VoucherManager.sol";
+import "./provider/GymManager.sol";
+import "./staking/StakeManager.sol";
 import "./Treasury.sol";
-import "./Token.sol";
+import "../token/DGYM.sol";
 import "./utilities/Vesting.sol";
 
 contract DeGymGovernor is
