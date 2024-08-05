@@ -7,12 +7,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import {IDeGymToken} from "../../token/DGYM.sol";
 
 /**
- * @title DeGymTimeCrowdsale
- * @dev DeGymTimeCrowdsale is a contract for managing a token crowdsale,
+ * @title DeGymCrowdsale
+ * @dev DeGymCrowdsale is a contract for managing a token crowdsale,
  * allowing investors to purchase tokens with ether. The contract has multiple phases,
  * each with its own rate and allocation. It also includes vesting wallet functionality.
  */
-contract DeGymTimeCrowdsale is Ownable {
+contract DeGymCrowdsale is Ownable {
     using SafeERC20 for IERC20;
 
     // The token being sold

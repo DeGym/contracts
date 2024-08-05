@@ -9,12 +9,6 @@ import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extens
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
-import "./consumer/VoucherManager.sol";
-import "./provider/GymManager.sol";
-import "./staking/StakeManager.sol";
-import "./Treasury.sol";
-import "../token/DGYM.sol";
-import "./utilities/Vesting.sol";
 
 contract DeGymGovernor is
     Governor,
@@ -30,17 +24,6 @@ contract DeGymGovernor is
     Vesting public vesting;
     address public saleContract;
 
-    event ListingFactorChanged(uint256 newListingFactor);
-    event DecayConstantChanged(uint256 newDecayConstant);
-    event MaxSupplyChanged(uint256 newMaxSupply);
-    event VoucherManagerBasePriceChanged(
-        address voucherManager,
-        uint256 newBasePrice
-    );
-    event SaleContractSet(address saleContract);
-    event TokensDistributed(address beneficiary, uint256 amount);
-    event UnsoldTokensBurned(uint256 amount);
-
     constructor(
         IVotes _token,
         TimelockController _timelock
@@ -54,11 +37,6 @@ contract DeGymGovernor is
         GovernorVotesQuorumFraction(4) 
         GovernorTimelockControl(_timelock) 
     {
-        gymManager = GymManager(_gymManager);
-        stakeManager = StakeManager(_stakeManager);
-        treasury = Treasury(_treasury);
-        daoToken = DeGymToken(_daoToken);
-        vesting = Vesting(_vesting);
     }
 
     function votingDelay() public pure override returns (uint256) {
@@ -71,53 +49,6 @@ contract DeGymGovernor is
 
     function proposalThreshold() public pure override returns (uint256) {
         return 0;
-    }
-
-
-    function changeListingFactor(uint256 newListingFactor) external onlyOwner {
-        gymManager.setListingFactor(newListingFactor);
-        emit ListingFactorChanged(newListingFactor);
-    }
-
-    function changeDecayConstant(uint256 newDecayConstant) external onlyOwner {
-        treasury.setDecayConstant(newDecayConstant);
-        emit DecayConstantChanged(newDecayConstant);
-    }
-
-    function changeMaxSupply(uint256 newMaxSupply) external onlyOwner {
-        daoToken.setMaxSupply(newMaxSupply);
-        emit MaxSupplyChanged(newMaxSupply);
-    }
-
-    function changeVoucherManagerBasePrice(
-        address voucherManagerAddress,
-        uint256 newBasePrice
-    ) external onlyOwner {
-        VoucherManager(voucherManagerAddress).setBasePrice(newBasePrice);
-        emit VoucherManagerBasePriceChanged(
-            voucherManagerAddress,
-            newBasePrice
-        );
-    }
-
-    function setSaleContract(address _saleContract) external onlyOwner {
-        saleContract = _saleContract;
-        emit SaleContractSet(_saleContract);
-    }
-
-    function distributeTokens(address beneficiary, uint256 amount) external {
-        require(
-            msg.sender == saleContract,
-            "Only sale contract can distribute tokens"
-        );
-        token.mint(address(vesting), amount);
-        vesting.setVesting(beneficiary, amount, block.timestamp, 365 days);
-        emit TokensDistributed(beneficiary, amount);
-    }
-
-    function burnUnsoldTokens(uint256 amount) external onlyOwner {
-        token.burn(amount);
-        emit UnsoldTokensBurned(amount);
     }
 
     // The functions below are overrides required by Solidity.
