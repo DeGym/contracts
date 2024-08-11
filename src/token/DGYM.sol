@@ -4,25 +4,19 @@ pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import {AccessManaged} from "@openzeppelin/contracts/access/manager/AccessManaged.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DeGymToken is
-    ERC20,
-    ERC20Burnable,
-    AccessManaged,
-    ERC20Permit,
-    ERC20Votes
-{
+contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
     /**
      * The total supply of the token is set to 1_000_000_000. This establishes the upper limit
      * of tokens that will ever be in circulation on Ethereum network.
      */
-    uint256 private _totalSupply = 1_000_000_000 * (10 ** 18);
+    uint256 private _totalSupply = 1_000_000_000e18;
 
     /**
      *
@@ -53,7 +47,7 @@ contract DeGymToken is
     uint256 private _marketingPromotion = (_totalSupply * 125) / 1000;
 
     /**
-     * The remaining 50% of the tokens, referred to as _remainingTokens, are allocated to the
+     * The remaining 40% of the tokens, referred to as _remainingTokens, are allocated to the
      * Deployer for purposes such as sales and ensuring liquidity post-listing. This large
      * allocation allows for significant market penetration and liquidity provision.
      */
@@ -64,13 +58,15 @@ contract DeGymToken is
                 _marketingPromotion +
                 _ecosystemDevelopment);
 
-    uint256 private _cap = 10_000_000_000 * (10 ** 18);
+    uint256 private _cap = 10_000_000_000e18;
 
     event CapUpdated(uint256 newCap);
 
-    constructor()
+    constructor(
+        address initialOwner
+    )
         ERC20("DeGym Token", "DGYM")
-        AccessManaged(msg.sender)
+        Ownable(initialOwner)
         ERC20Permit("DeGym Token")
         ERC20Votes()
     {
@@ -117,16 +113,16 @@ contract DeGymToken is
         return _cap;
     }
 
-    function setCap(uint256 newCap) public restricted {
+    function setCap(uint256 newCap) public onlyOwner {
         require(
             newCap >= totalSupply(),
             "New cap must be greater than or equal to total supply"
         );
-        _cap = newCap * (10 ** decimals());
+        _cap = newCap;
         emit CapUpdated(_cap);
     }
 
-    function mint(address to, uint256 amount) public restricted {
+    function mint(address to, uint256 amount) public onlyOwner {
         _mintCapped(to, amount);
     }
 
@@ -134,6 +130,17 @@ contract DeGymToken is
         require(totalSupply() + amount <= _cap, "ERC20Capped: cap exceeded");
         _mint(account, amount);
     }
+
+    function clock() public view override returns (uint48) {
+        return uint48(block.timestamp);
+    }
+
+    // solhint-disable-next-line func-name-mixedcase
+    function CLOCK_MODE() public pure override returns (string memory) {
+        return "mode=timestamp";
+    }
+
+    // The following functions are overrides required by Solidity.
 
     function _update(
         address from,
@@ -143,7 +150,6 @@ contract DeGymToken is
         super._update(from, to, value);
     }
 
-    // Override the nonces function
     function nonces(
         address owner
     ) public view override(ERC20Permit, Nonces) returns (uint256) {

@@ -8,7 +8,6 @@ import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/ex
 import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
-import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 contract DeGymGovernor is
     Governor,
@@ -17,27 +16,15 @@ contract DeGymGovernor is
     GovernorVotesQuorumFraction,
     GovernorTimelockControl
 {
-    GymManager public gymManager;
-    StakeManager public stakeManager;
-    Treasury public treasury;
-    DeGymToken public daoToken;
-    Vesting public vesting;
-    address public saleContract;
-
     constructor(
         IVotes _token,
         TimelockController _timelock
-        address _gymManager,
-        address _stakeManager,
-        address _treasury,
-        address _vesting
     )
-        Governor("DeGym Governor") 
-        GovernorVotes(_token) 
-        GovernorVotesQuorumFraction(4) 
-        GovernorTimelockControl(_timelock) 
-    {
-    }
+        Governor("GovernorContract")
+        GovernorVotes(_token)
+        GovernorVotesQuorumFraction(4)
+        GovernorTimelockControl(_timelock)
+    {}
 
     function votingDelay() public pure override returns (uint256) {
         return 7200; // 1 day
@@ -53,13 +40,26 @@ contract DeGymGovernor is
 
     // The functions below are overrides required by Solidity.
 
-    function state(uint256 proposalId) public view override(Governor, GovernorTimelockControl) returns (ProposalState) {
+    function state(
+        uint256 proposalId
+    )
+        public
+        view
+        override(Governor, GovernorTimelockControl)
+        returns (ProposalState)
+    {
         return super.state(proposalId);
     }
 
     function proposalNeedsQueuing(
         uint256 proposalId
-    ) public view virtual override(Governor, GovernorTimelockControl) returns (bool) {
+    )
+        public
+        view
+        virtual
+        override(Governor, GovernorTimelockControl)
+        returns (bool)
+    {
         return super.proposalNeedsQueuing(proposalId);
     }
 
@@ -70,7 +70,14 @@ contract DeGymGovernor is
         bytes[] memory calldatas,
         bytes32 descriptionHash
     ) internal override(Governor, GovernorTimelockControl) returns (uint48) {
-        return super._queueOperations(proposalId, targets, values, calldatas, descriptionHash);
+        return
+            super._queueOperations(
+                proposalId,
+                targets,
+                values,
+                calldatas,
+                descriptionHash
+            );
     }
 
     function _executeOperations(
@@ -80,7 +87,13 @@ contract DeGymGovernor is
         bytes[] memory calldatas,
         bytes32 descriptionHash
     ) internal override(Governor, GovernorTimelockControl) {
-        super._executeOperations(proposalId, targets, values, calldatas, descriptionHash);
+        super._executeOperations(
+            proposalId,
+            targets,
+            values,
+            calldatas,
+            descriptionHash
+        );
     }
 
     function _cancel(
@@ -92,7 +105,12 @@ contract DeGymGovernor is
         return super._cancel(targets, values, calldatas, descriptionHash);
     }
 
-    function _executor() internal view override(Governor, GovernorTimelockControl) returns (address) {
+    function _executor()
+        internal
+        view
+        override(Governor, GovernorTimelockControl)
+        returns (address)
+    {
         return super._executor();
     }
 }
