@@ -7,7 +7,7 @@ import "../../token/DGYM.sol";
 import "./StakeManager.sol";
 
 contract BondPool is Ownable {
-    IDeGymToken public daoToken;
+    IDGYM public daoToken;
     StakeManager public stakeManager;
     uint256 public totalStaked;
     uint256 public totalEarnings;

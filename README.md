@@ -1,48 +1,74 @@
-# DeGym Smart Contracts
+## Foundry
 
-This repository contains the smart contracts for the DeGym project. The project includes several contracts to manage tokens, vouchers, certificates, check-ins, and staking.
+**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
 
-## Contracts
+Foundry consists of:
 
-- `Token`: Manages the issuance and transfer of DGYM tokens.
-- `VoucherManager`: Manages the issuance and management of vouchers (NFTs).
-- `GymManager`: Manages gym catalog, CRUD operations for gyms, and validates gym stakes based on counterpart stakes.
-- `Checkin`: Manages the check-in process using vouchers and triggers payment.
-- `StakeManager`: Manages the deployment of user-specific stake pools and staking parameters.
-- `StakePool`: Manages the staking and reward distribution for a specific user.
-- `Treasure`: Manages the staking and reward distribution for a specific user. Manages the issuance of DGYM tokens.
+-   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
+-   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
+-   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
+-   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
 
-## Setup
+## Documentation
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-    ```
+https://book.getfoundry.sh/
 
-2. Compile contracts:
-    ```bash
-    ape compile
-    ```
+## Usage
 
-2.1 Add Account (generate or import if not exists)
-    ```bash
-    ape accounts list
-    ape accounts generate account_alias
-    ```
+### Build
 
-2.2 Make sure your account has some testnet TARA for deploying contracts and running tests. You can use the Taraxa testnet faucet to get testnet TARA.
+```shell
+$ forge build
+```
 
+### Test
 
-1. Run tests:
-    ```bash
-    ape test --network taraxa:testnet
-    ```
+```shell
+$ forge test
+```
 
-2. Deploy contracts:
-    ```bash
-    ape run --network taraxa:testnet scripts/deploy.py
-    ```
+### Format
 
-## Configuration
+```shell
+$ forge fmt
+```
 
-Update the `ape-config.yaml` file with your specific configuration needs.
+### Gas Snapshots
+
+```shell
+$ forge snapshot
+```
+
+### Anvil
+
+```shell
+$ anvil
+```
+
+### Deploy
+
+```shell
+$ forge script script/DeployDeGymToken.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```
+
+### Cast
+
+```shell
+$ cast <subcommand>
+```
+
+### Help
+
+```shell
+$ forge --help
+$ anvil --help
+$ cast --help
+```
+
+### Set environment variables based on NETWORK value
+```sh
+chmod +x set-env.sh
+```
+```sh
+source ./set-env.sh
+```

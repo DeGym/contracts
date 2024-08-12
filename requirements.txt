@@ -1,5 +1,0 @@
-eth-ape
-ape-solidity
-web3
-pytest
-python-dotenv
