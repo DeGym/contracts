@@ -23,28 +23,28 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
      * Allocating 20% to the "Ecosystem Development Fund" is crucial for funding ongoing
      * development, research, and innovation within the token's ecosystem.
      */
-    uint256 private _ecosystemDevelopment = (_totalSupply * 20) / 100;
+    uint256 public ecosystemDevelopment = (_totalSupply * 20) / 100;
 
     /**
      * Allocating 15% of the total supply to the "Team Growth Fund" supports the team's
      * long-term commitment and incentivizes their continuous contribution to the project's
      * success.
      */
-    uint256 private _teamGrowth = (_totalSupply * 15) / 100;
+    uint256 public teamGrowth = (_totalSupply * 15) / 100;
 
     /**
      * Allocating 12.5% for the "Community Engagement Fund" fosters a strong, interactive
      * community. This fund can be used for community rewards or other engagement
      * initiatives.
      */
-    uint256 private _communityEngagement = (_totalSupply * 125) / 1000;
+    uint256 public communityEngagement = (_totalSupply * 125) / 1000;
 
     /**
      * Allocating 12.5% for the "Marketing and Promotion Fund" ensures ample resources are available
      * for advertising, partnerships, and other promotional activities to increase the token's
      * visibility and adoption.
      */
-    uint256 private _marketingPromotion = (_totalSupply * 125) / 1000;
+    uint256 public marketingPromotion = (_totalSupply * 125) / 1000;
 
     /**
      * The remaining 40% of the tokens, referred to as _remainingTokens, are allocated to the
@@ -53,12 +53,17 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
      */
     uint256 private _remainingTokens =
         _totalSupply -
-            (_teamGrowth +
-                _communityEngagement +
-                _marketingPromotion +
-                _ecosystemDevelopment);
+            (teamGrowth +
+                communityEngagement +
+                marketingPromotion +
+                ecosystemDevelopment);
 
     uint256 private _cap = 10_000_000_000e18;
+
+    address public ecosystemDevelopmentVestingWallet;
+    address public teamGrowthVestingWallet;
+    address public communityEngagementVestingWallet;
+    address public marketingPromotionVestingWallet;
 
     event CapUpdated(uint256 newCap);
 
@@ -70,31 +75,28 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
         ERC20Permit("DeGym Token")
         ERC20Votes()
     {
-        address ecosystemDevelopmentVesting = address(
+        ecosystemDevelopmentVestingWallet = address(
             new VestingWallet(
                 0x609D40C1d5750ff03a3CafF30152AD03243c02cB,
                 uint64(block.timestamp + 30 days), // 1 month cliff
                 uint64(11 * 30 days) // Vesting over 11 months
             )
         );
-
-        address teamGrowthVesting = address(
+        teamGrowthVestingWallet = address(
             new VestingWallet(
                 0xaDcB2f54F652BFD7Ac1d7D7b12213b4519F0265D,
                 uint64(block.timestamp + 30 days), // 1 month cliff
                 uint64(11 * 30 days) // Vesting over 11 months
             )
         );
-
-        address communityEngagementVesting = address(
+        communityEngagementVestingWallet = address(
             new VestingWallet(
                 0x139780E08d3DAF2f72D10ccC635593cDB301B4bC,
                 uint64(block.timestamp + 14 days), // 2 weeks cliff
                 uint64(11 * 30 days) // Vesting over 11 months
             )
         );
-
-        address marketingPromotionVesting = address(
+        marketingPromotionVestingWallet = address(
             new VestingWallet(
                 0x6BC8906aD6369bD5cfe7B4f2f181f0759A3D53b6,
                 uint64(block.timestamp + 30 days), // 1 month cliff
@@ -102,10 +104,10 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
             )
         );
 
-        _mint(ecosystemDevelopmentVesting, _ecosystemDevelopment);
-        _mint(teamGrowthVesting, _teamGrowth);
-        _mint(communityEngagementVesting, _communityEngagement);
-        _mint(marketingPromotionVesting, _marketingPromotion);
+        _mint(ecosystemDevelopmentVestingWallet, ecosystemDevelopment);
+        _mint(teamGrowthVestingWallet, teamGrowth);
+        _mint(communityEngagementVestingWallet, communityEngagement);
+        _mint(marketingPromotionVestingWallet, marketingPromotion);
         _mint(msg.sender, _remainingTokens);
     }
 

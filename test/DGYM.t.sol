@@ -14,7 +14,7 @@ contract TokenTest is Test {
         token = new DeGymToken(owner);
     }
 
-    function testInitialSupply() public {
+    function testInitialSupply() public view {
         uint256 expectedTotalSupply = 1_000_000_000e18;
         assertEq(token.totalSupply(), expectedTotalSupply);
     }
@@ -65,7 +65,7 @@ contract TokenTest is Test {
         assertEq(token.balanceOf(user1), 50e18);
     }
 
-    function testNonces() public {
+    function testNonces() public view {
         assertEq(token.nonces(owner), 0);
     }
 
