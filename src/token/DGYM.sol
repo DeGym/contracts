@@ -144,6 +144,10 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
 
     // The following functions are overrides required by Solidity.
 
+    function totalSupply() public view virtual override returns (uint256) {
+        return super.totalSupply();
+    }
+
     function _update(
         address from,
         address to,
@@ -157,34 +161,4 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
     ) public view override(ERC20Permit, Nonces) returns (uint256) {
         return super.nonces(owner);
     }
-}
-
-interface IDGYM is IERC20 {
-    event CapUpdated(uint256 newCap);
-
-    function burn(uint256 amount) external;
-
-    function burnFrom(address account, uint256 amount) external;
-
-    function mint(address to, uint256 amount) external;
-
-    function permit(
-        address owner,
-        address spender,
-        uint256 amount,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-
-    function cap() external view returns (uint256);
-
-    function setCap(uint256 newCap) external;
-
-    function name() external view returns (string memory);
-
-    function symbol() external view returns (string memory);
-
-    function decimals() external view returns (uint8);
 }

@@ -3,19 +3,18 @@ pragma solidity ^0.8.20;
 
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessManaged} from "@openzeppelin/contracts/access/manager/AccessManaged.sol";
-import {IDGYM} from "./DGYM.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {DeGymToken} from "./DGYM.sol";
 
-contract Crowdfund is AccessManaged {
-    using SafeERC20 for IERC20;
+contract Crowdfund is Ownable {
+    using SafeERC20 for DeGymToken;
 
-    IDGYM public token;
+    DeGymToken public token;
     address public wallet;
     string[] public phaseNames;
 
     struct Phase {
-        uint256 rate;
+        uint256 rate; // Rate in percentage (e.g., 100 means 1%)
         uint256 allocation; // in tokens
         uint256 sold;
         bool burnable;
@@ -38,10 +37,9 @@ contract Crowdfund is AccessManaged {
 
     constructor(
         address tokenAddress,
-        address walletAddress,
-        address initialAuthority
-    ) AccessManaged(initialAuthority) {
-        token = IDGYM(tokenAddress);
+        address walletAddress
+    ) Ownable(msg.sender) {
+        token = DeGymToken(tokenAddress);
         wallet = walletAddress;
     }
 
@@ -49,16 +47,16 @@ contract Crowdfund is AccessManaged {
         buyTokens(msg.sender);
     }
 
-    function initializePhase(
+    function createPhase(
         string memory phaseName,
-        uint256 rate,
+        uint256 rate, // Rate in percentage (100 = 1%)
         uint256 allocation,
         uint256 startTime,
         uint256 duration,
         bool burnable,
         uint64 cliffDuration,
         uint64 vestingDuration
-    ) public restricted {
+    ) public onlyOwner {
         uint256 endTime = startTime + duration;
         require(endTime > startTime, "End time must be after start time");
 
@@ -101,7 +99,7 @@ contract Crowdfund is AccessManaged {
                 if (phase.burnable) {
                     uint256 unsoldTokens = phase.allocation - phase.sold;
                     if (unsoldTokens > 0) {
-                        token.burn(unsoldTokens);
+                        token.burnFrom(owner(), unsoldTokens);
                         emit PhaseEnded(phaseNames[i], unsoldTokens);
                     }
                 }
@@ -128,7 +126,10 @@ contract Crowdfund is AccessManaged {
         require(bytes(activePhaseName).length > 0, "No active sale phase");
 
         Phase storage phase = phases[activePhaseName];
-        tokens = weiAmount / phase.rate;
+
+        // Calculate tokens based on percentage rate
+        tokens = (weiAmount * phase.rate) / 10000; // Assuming rate is in basis points (10000 = 100%)
+
         require(
             phase.sold + tokens <= phase.allocation,
             "Exceeds phase allocation"
@@ -143,9 +144,9 @@ contract Crowdfund is AccessManaged {
                 uint64(phase.vestingDuration)
             );
             address vestingWallet = vestingWallets[beneficiary];
-            IERC20(address(token)).safeTransfer(vestingWallet, tokens);
+            token.safeTransferFrom(owner(), vestingWallet, tokens);
         } else {
-            IERC20(address(token)).safeTransfer(beneficiary, tokens);
+            token.safeTransferFrom(owner(), beneficiary, tokens);
         }
 
         emit TokensPurchased(beneficiary, weiAmount, tokens);
@@ -181,19 +182,16 @@ contract Crowdfund is AccessManaged {
     function transferToVestingWallet(
         address beneficiary,
         uint256 amount
-    ) external restricted {
+    ) external onlyOwner {
         require(
             vestingWallets[beneficiary] != address(0),
             "Vesting wallet does not exist for beneficiary"
         );
-        IERC20(address(token)).safeTransfer(
-            vestingWallets[beneficiary],
-            amount
-        );
+        token.safeTransferFrom(owner(), vestingWallets[beneficiary], amount);
     }
 
-    function withdrawTokens(IERC20 tokenAddress) external restricted {
-        uint256 balance = tokenAddress.balanceOf(address(this));
-        tokenAddress.safeTransfer(wallet, balance);
+    function withdrawTokens() external onlyOwner {
+        uint256 balance = token.balanceOf(address(this));
+        token.safeTransfer(wallet, balance);
     }
 }
