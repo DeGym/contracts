@@ -144,10 +144,6 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
 
     // The following functions are overrides required by Solidity.
 
-    function totalSupply() public view virtual override returns (uint256) {
-        return super.totalSupply();
-    }
-
     function _update(
         address from,
         address to,
