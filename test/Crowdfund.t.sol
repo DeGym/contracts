@@ -12,7 +12,7 @@ contract CrowdfundTest is Test {
 
     uint256 private ownerPrivateKey = 0xA11CE; // Example private key
     address private owner = vm.addr(ownerPrivateKey); // Derive the address from the private key
-    address private wallet = address(0x2);
+    address private wallet = owner;
     address private beneficiary = address(0x4);
 
     function setUp() public {
@@ -96,7 +96,7 @@ contract CrowdfundTest is Test {
     }
 
     function testBuyTokensPreSeed() public {
-        uint256 phaseAllocation = (token.totalSupply() * 3) / 100;
+        uint256 phaseAllocation = calculatePhaseAllocation();
         vm.warp(block.timestamp + 1);
         crowdfund.activatePhaseAutomatically();
         console.log("Phase activated automatically.");
@@ -105,12 +105,39 @@ contract CrowdfundTest is Test {
         console.log("Initial beneficiary token balance:", initialBalance);
 
         uint256 purchaseAmount = 1 ether;
-        console.log("Purchase amount (in Ether):", purchaseAmount);
+        console.log("Purchase amount (in Tara):", purchaseAmount);
 
-        // Use permit to allow the Crowdfund contract to spend the required tokens
-        _permitPhase("Pre-Seed");
+        // Verify owner's initial Ether balance
+        uint256 initialOwnerBalance = owner.balance;
+        console.log("Initial owner Ether balance:", initialOwnerBalance);
+
+        // Execute permit for the phase
+        executePermitForPhase("Pre-Seed");
+
+        // Perform token purchase
+        purchaseTokens(purchaseAmount);
+
+        // Verify owner's balance after purchase
+        verifyOwnerBalanceAfterPurchase(initialOwnerBalance, purchaseAmount);
+
+        // Handle vesting and final balance verification
+        handleVestingAndVerifyFinalBalance(
+            initialBalance,
+            phaseAllocation,
+            purchaseAmount
+        );
+    }
+
+    function calculatePhaseAllocation() internal view returns (uint256) {
+        return (token.totalSupply() * 3) / 100;
+    }
+
+    function executePermitForPhase(string memory phaseName) internal {
+        _permitPhase(phaseName);
         console.log("Permit phase executed.");
+    }
 
+    function purchaseTokens(uint256 purchaseAmount) internal {
         // Fund the beneficiary's account with Ether
         vm.deal(beneficiary, purchaseAmount);
         console.log("Beneficiary's account funded with Ether.");
@@ -120,14 +147,27 @@ contract CrowdfundTest is Test {
         (bool success, ) = address(crowdfund).call{value: purchaseAmount}("");
         require(success, "Ether transfer failed");
         console.log("Ether transferred to Crowdfund contract.");
+    }
 
-        // Since the rate is now 10000 basis points (100%), we expect to get the same amount of tokens as wei sent.
-        uint256 expectedTokens = purchaseAmount; // 1 Ether * 100% = 1 DGYM
-        console.log(
-            "Expected tokens to be received by beneficiary:",
-            expectedTokens
-        );
+    function verifyOwnerBalanceAfterPurchase(
+        uint256 initialOwnerBalance,
+        uint256 purchaseAmount
+    ) internal view {
+        // Verify owner's Ether balance after the purchase
+        uint256 finalOwnerBalance = owner.balance;
+        console.log("Final owner Ether balance:", finalOwnerBalance);
+        // TODO
+        // Calculate the expected balance after the purchase
+        uint256 expectedOwnerBalance = initialOwnerBalance + purchaseAmount;
+        assertEq(finalOwnerBalance, expectedOwnerBalance);
+        console.log("Verified owner Ether balance after token purchase.");
+    }
 
+    function handleVestingAndVerifyFinalBalance(
+        uint256 initialBalance,
+        uint256 phaseAllocation,
+        uint256 expectedTokens
+    ) internal {
         // Check that tokens have been transferred to the vesting wallet
         address payable vestingWalletAddress = payable(
             crowdfund.vestingWallets(beneficiary)
