@@ -20,12 +20,12 @@ contract GovernorTest is Test {
         vm.startPrank(deployer);
 
         token = new DeGymToken(deployer);
-        // Declare and initialize arrays correctly
+
         address[] memory proposers = new address[](1);
         proposers[0] = deployer;
 
         address[] memory executors = new address[](1);
-        executors[0] = deployer;
+        executors[0] = address(0); // This means anyone can execute
 
         timelock = new TimelockController(
             1 days,
@@ -42,12 +42,14 @@ contract GovernorTest is Test {
         vm.warp(block.timestamp + 1);
         governor = new DeGymGovernor(token, timelock);
 
-        // Grant the Governor the executor role on the TimelockController
-        timelock.grantRole(timelock.EXECUTOR_ROLE(), address(governor));
+        // Grant roles to the governor
         timelock.grantRole(timelock.PROPOSER_ROLE(), address(governor));
+        timelock.grantRole(timelock.EXECUTOR_ROLE(), address(governor));
+        timelock.grantRole(timelock.CANCELLER_ROLE(), address(governor));
 
-        // Transfer ownership of the token to the timelock or governor
-        token.transferOwnership(address(timelock));
+        // Revoke admin role from deployer and give it to timelock
+        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(timelock));
+        token.revokeRole(token.DEFAULT_ADMIN_ROLE(), deployer);
 
         vm.stopPrank();
     }
@@ -224,7 +226,6 @@ contract GovernorTest is Test {
         // Ensure that delegation is recognized by moving forward in time
         vm.warp(block.timestamp + 1);
 
-        // Declare and initialize variables correctly
         address[] memory targets = new address[](1);
         uint256[] memory values = new uint256[](1);
         bytes[] memory calldatas = new bytes[](1);
@@ -242,19 +243,17 @@ contract GovernorTest is Test {
             calldatas,
             "Proposal: Change token cap to 15 billion"
         );
-        // Move forward in time to start voting
+
         vm.warp(block.timestamp + governor.votingDelay() + 1);
-        // Cast vote
-        governor.castVote(proposalId, 1); // 0 = Against; 1 = For; 2 = Abstain
-        // Fast forward to end of voting period
+        governor.castVote(proposalId, 1); // 1 = For
+
         vm.warp(block.timestamp + governor.votingPeriod() + 1);
+
         governor.queue(
             targets,
             values,
             calldatas,
-            keccak256(
-                abi.encodePacked("Proposal: Change token cap to 15 billion")
-            )
+            keccak256(bytes("Proposal: Change token cap to 15 billion"))
         );
 
         assertEq(
@@ -262,15 +261,13 @@ contract GovernorTest is Test {
             uint(IGovernor.ProposalState.Queued)
         );
 
-        vm.warp(block.timestamp + 2 days);
+        vm.warp(block.timestamp + timelock.getMinDelay() + 1);
 
         governor.execute(
             targets,
             values,
             calldatas,
-            keccak256(
-                abi.encodePacked("Proposal: Change token cap to 15 billion")
-            )
+            keccak256(bytes("Proposal: Change token cap to 15 billion"))
         );
 
         assertEq(
@@ -278,7 +275,7 @@ contract GovernorTest is Test {
             uint(IGovernor.ProposalState.Executed)
         );
 
-        assertEq(uint(token.cap()), uint(15_000_000_000e18));
+        assertEq(token.cap(), 15_000_000_000e18);
 
         vm.stopPrank();
     }
