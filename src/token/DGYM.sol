@@ -10,8 +10,18 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
+contract DeGymToken is
+    ERC20,
+    ERC20Burnable,
+    Ownable,
+    ERC20Permit,
+    ERC20Votes,
+    AccessControl
+{
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
     /**
      * The total supply of the token is set to 1_000_000_000. This establishes the upper limit
      * of tokens that will ever be in circulation on Ethereum network.
@@ -74,7 +84,11 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
         Ownable(initialOwner)
         ERC20Permit("DeGym Token")
         ERC20Votes()
+        AccessControl()
     {
+        _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
+        _grantRole(MINTER_ROLE, initialOwner);
+
         ecosystemDevelopmentVestingWallet = address(
             new VestingWallet(
                 0x609D40C1d5750ff03a3CafF30152AD03243c02cB,
@@ -115,7 +129,7 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
         return _cap;
     }
 
-    function setCap(uint256 newCap) public onlyOwner {
+    function setCap(uint256 newCap) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(
             newCap >= totalSupply(),
             "New cap must be greater than or equal to total supply"
@@ -124,7 +138,7 @@ contract DeGymToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
         emit CapUpdated(_cap);
     }
 
-    function mint(address to, uint256 amount) public onlyOwner {
+    function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         _mintCapped(to, amount);
     }
 

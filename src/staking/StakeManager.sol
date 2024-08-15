@@ -16,12 +16,14 @@ contract StakeManager {
     uint256 public totalStaked;
     uint256 public totalBondWeight;
     uint256 public lastUpdateTime;
+    uint256 public totalUnclaimedRewards;
 
     uint256 public constant DECAY_CONSTANT = 46; // 0.046% daily decay
     uint256 public constant BASIS_POINTS = 10000;
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event RewardsDistributed(uint256 totalReward);
+    event RewardClaimed(address indexed stakeholder, uint256 amount);
 
     constructor(address _token) {
         token = DeGymToken(_token);
@@ -40,7 +42,7 @@ contract StakeManager {
     }
 
     function calculateInflationRate() public view returns (uint256) {
-        uint256 currentSupply = token.totalSupply();
+        uint256 currentSupply = token.totalSupply() + totalUnclaimedRewards;
         uint256 maxSupply = token.cap();
         return (DECAY_CONSTANT * (maxSupply - currentSupply)) / maxSupply;
     }
@@ -57,6 +59,8 @@ contract StakeManager {
         uint256 totalReward = (totalStaked * inflationRate * timePassed) /
             (365 days * BASIS_POINTS);
 
+        totalUnclaimedRewards += totalReward;
+
         for (uint256 i = 0; i < stakeholders.length; i++) {
             address stakeholder = stakeholders[i];
             BondPool bondPool = BondPool(bondPools[stakeholder]);
@@ -70,38 +74,18 @@ contract StakeManager {
         emit RewardsDistributed(totalReward);
     }
 
-    function bond(uint256 _amount, uint256 _lockDuration) external {
-        require(
-            bondPools[msg.sender] != address(0),
-            "Deploy a bond pool first"
-        );
-        updateRewards();
-
-        BondPool bondPool = BondPool(bondPools[msg.sender]);
-        uint256 oldWeight = bondPool.getTotalBondWeight();
-
-        token.safeTransferFrom(msg.sender, address(bondPool), _amount);
-        bondPool.bond(_amount, _lockDuration);
-
-        uint256 newWeight = bondPool.getTotalBondWeight();
-        totalBondWeight = totalBondWeight - oldWeight + newWeight;
-        totalStaked += _amount;
+    function notifyWeightChange(uint256 _newWeight) external {
+        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+        totalBondWeight = _newWeight;
     }
 
-    function unbond(uint256 _bondIndex) external {
-        require(bondPools[msg.sender] != address(0), "No bond pool found");
-        updateRewards();
-
-        BondPool bondPool = BondPool(bondPools[msg.sender]);
-        uint256 oldWeight = bondPool.getTotalBondWeight();
-        uint256 oldBondsCount = bondPool.getBondsCount();
-
-        bondPool.unbond(_bondIndex);
-
-        uint256 newWeight = bondPool.getTotalBondWeight();
-        uint256 newBondsCount = bondPool.getBondsCount();
-        totalBondWeight = totalBondWeight - oldWeight + newWeight;
-        totalStaked -= (oldBondsCount - newBondsCount);
+    function notifyStakeChange(uint256 _amount, bool _isIncrease) external {
+        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+        if (_isIncrease) {
+            totalStaked += _amount;
+        } else {
+            totalStaked -= _amount;
+        }
     }
 
     function claimReward(uint256 _bondIndex) external {
@@ -109,7 +93,13 @@ contract StakeManager {
         updateRewards();
 
         BondPool bondPool = BondPool(bondPools[msg.sender]);
-        bondPool.claimReward(_bondIndex);
+        uint256 rewardAmount = bondPool.claimReward(_bondIndex);
+
+        if (rewardAmount > 0) {
+            totalUnclaimedRewards -= rewardAmount;
+            token.mint(msg.sender, rewardAmount); // Now StakeManager can mint directly
+            emit RewardClaimed(msg.sender, rewardAmount);
+        }
     }
 
     function getTotalBondWeight() external view returns (uint256) {

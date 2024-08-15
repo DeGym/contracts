@@ -8,67 +8,65 @@ import {DeGymToken} from "../src/token/DGYM.sol";
 
 contract StakeManagerTest is Test {
     StakeManager public stakeManager;
-    DeGymToken public dgymToken;
-    address public alice = address(0x1);
+    DeGymToken public token;
+    uint256 private alicePrivateKey = 0xa11ce;
+    address public alice = vm.addr(alicePrivateKey);
     address public bob = address(0x2);
     address public owner = address(0x3);
-    uint256 private alicePrivateKey;
+    BondPool public aliceBondPool;
+    BondPool public bobBondPool;
 
     function setUp() public {
+        vm.startPrank(owner);
         console.log("Setting up test environment");
         // Deploy DeGymToken
-        dgymToken = new DeGymToken(owner);
-        console.log("DeGymToken deployed at:", address(dgymToken));
-
+        token = new DeGymToken(owner);
+        console.log("DeGymToken deployed at:", address(token));
         // Deploy StakeManager with DeGymToken
-        stakeManager = new StakeManager(address(dgymToken));
+        stakeManager = new StakeManager(address(token));
         console.log("StakeManager deployed at:", address(stakeManager));
-
+        // Grant MINTER_ROLE to StakeManager
+        token.grantRole(token.MINTER_ROLE(), address(stakeManager));
+        console.log("MINTER_ROLE granted to StakeManager");
         // Fund the stake manager with DGYM tokens for rewards
-        vm.prank(owner);
-        dgymToken.mint(address(stakeManager), 1000000 * 10 ** 18);
+        token.mint(address(stakeManager), 1000000 * 10 ** 18);
         console.log("StakeManager funded with 1,000,000 DGYM tokens");
-
         // Give Alice and Bob some DGYM tokens
-        vm.prank(owner);
-        dgymToken.mint(alice, 10000 * 10 ** 18);
+        token.mint(alice, 10000 * 10 ** 18);
         console.log("Alice funded with 10,000 DGYM tokens");
-        vm.prank(owner);
-        dgymToken.mint(bob, 10000 * 10 ** 18);
+        token.mint(bob, 10000 * 10 ** 18);
         console.log("Bob funded with 10,000 DGYM tokens");
+        vm.stopPrank();
 
         vm.startPrank(alice);
-        dgymToken.approve(address(stakeManager), type(uint256).max);
+        token.approve(address(stakeManager), type(uint256).max);
         console.log("Alice approved StakeManager to spend her DGYM tokens");
         vm.stopPrank();
 
         vm.startPrank(bob);
-        dgymToken.approve(address(stakeManager), type(uint256).max);
+        token.approve(address(stakeManager), type(uint256).max);
         console.log("Bob approved StakeManager to spend his DGYM tokens");
         vm.stopPrank();
-
-        alicePrivateKey = 0xa11ce; // Replace with an actual private key
-        alice = vm.addr(alicePrivateKey);
     }
 
     function _permitForStaking(
-        address owner,
+        address _owner,
         uint256 amount,
         uint256 deadline
     ) internal {
-        uint256 nonce = dgymToken.nonces(owner);
+        uint256 nonce = token.nonces(_owner);
 
         // Generate signature using private key of owner
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                dgymToken.DOMAIN_SEPARATOR(),
+                token.DOMAIN_SEPARATOR(),
                 keccak256(
                     abi.encode(
                         keccak256(
                             "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
                         ),
-                        owner,
+                        _owner,
                         address(stakeManager),
                         amount,
                         nonce,
@@ -80,15 +78,7 @@ contract StakeManagerTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, digest);
         // Call permit on the token contract
-        dgymToken.permit(
-            owner,
-            address(stakeManager),
-            amount,
-            deadline,
-            v,
-            r,
-            s
-        );
+        token.permit(_owner, address(stakeManager), amount, deadline, v, r, s);
         console.log(
             "Amount permitted to be spent by StakeManager using permit:",
             amount
@@ -111,7 +101,8 @@ contract StakeManagerTest is Test {
     function testBond() public {
         console.log("Testing bond function");
         vm.startPrank(alice);
-        stakeManager.deployBondPool();
+        stakeManager.deployBondPool(); // Deploy the bond pool first
+        aliceBondPool = BondPool(stakeManager.bondPools(alice));
         console.log("Alice deployed her BondPool");
 
         uint256 amount = 1000 * 10 ** 18;
@@ -124,7 +115,8 @@ contract StakeManagerTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         _permitForStaking(alice, amount, deadline);
 
-        stakeManager.bond(amount, lockDuration);
+        token.approve(address(aliceBondPool), amount);
+        aliceBondPool.bond(amount, lockDuration);
 
         uint256 finalTotalStaked = stakeManager.totalStaked();
         console.log("Final total staked:", finalTotalStaked / 1e18, "DGYM");
@@ -143,12 +135,14 @@ contract StakeManagerTest is Test {
         console.log("Testing unbond function");
         vm.startPrank(alice);
         stakeManager.deployBondPool();
+        aliceBondPool = BondPool(stakeManager.bondPools(alice));
         console.log("Alice deployed her BondPool");
 
         uint256 amount = 1000 * 10 ** 18;
         uint256 lockDuration = 30 days;
 
-        stakeManager.bond(amount, lockDuration);
+        token.approve(address(aliceBondPool), amount);
+        aliceBondPool.bond(amount, lockDuration);
 
         uint256 initialTotalStaked = stakeManager.totalStaked();
         console.log("Initial total staked:", initialTotalStaked / 1e18, "DGYM");
@@ -156,7 +150,7 @@ contract StakeManagerTest is Test {
         vm.warp(block.timestamp + lockDuration + 1);
         console.log("Time warped to after lock duration");
 
-        stakeManager.unbond(0);
+        aliceBondPool.unbond(0);
         console.log("Alice unbonded her stake");
 
         uint256 finalTotalStaked = stakeManager.totalStaked();
@@ -176,32 +170,50 @@ contract StakeManagerTest is Test {
         console.log("Testing claimReward function");
         vm.startPrank(alice);
         stakeManager.deployBondPool();
+        aliceBondPool = BondPool(stakeManager.bondPools(alice));
         console.log("Alice deployed her BondPool");
 
         uint256 amount = 1000 * 10 ** 18;
         uint256 lockDuration = 365 days;
 
-        stakeManager.bond(amount, lockDuration);
+        token.approve(address(aliceBondPool), amount);
+        aliceBondPool.bond(amount, lockDuration);
 
         vm.warp(block.timestamp + 30 days);
         console.log("Time warped 30 days into the future");
 
-        uint256 initialBalance = dgymToken.balanceOf(alice);
+        uint256 initialBalance = token.balanceOf(alice);
         console.log("Alice's initial DGYM balance:", initialBalance / 1e18);
 
+        uint256 initialTotalSupply = token.totalSupply();
+        console.log("Initial total supply:", initialTotalSupply / 1e18);
+
+        stakeManager.updateRewards();
         stakeManager.claimReward(0);
         console.log("Alice claimed her reward");
 
-        uint256 finalBalance = dgymToken.balanceOf(alice);
+        uint256 finalBalance = token.balanceOf(alice);
         console.log("Alice's final DGYM balance:", finalBalance / 1e18);
+
+        uint256 finalTotalSupply = token.totalSupply();
+        console.log("Final total supply:", finalTotalSupply / 1e18);
 
         assertTrue(
             finalBalance > initialBalance,
             "Balance should increase after claiming reward"
         );
+        assertTrue(
+            finalTotalSupply > initialTotalSupply,
+            "Total supply should increase after claiming reward"
+        );
         console.log(
             "Alice's balance increased by",
             (finalBalance - initialBalance) / 1e18,
+            "DGYM"
+        );
+        console.log(
+            "Total supply increased by",
+            (finalTotalSupply - initialTotalSupply) / 1e18,
             "DGYM"
         );
 
@@ -212,15 +224,17 @@ contract StakeManagerTest is Test {
         console.log("Testing multiple stakeholders");
         vm.startPrank(alice);
         stakeManager.deployBondPool();
-        console.log("Alice deployed her BondPool");
-        stakeManager.bond(500 * 10 ** 18, 30 days);
+        aliceBondPool = BondPool(stakeManager.bondPools(alice));
+        token.approve(address(aliceBondPool), 500 * 10 ** 18);
+        aliceBondPool.bond(500 * 10 ** 18, 30 days);
         console.log("Alice bonded 500 DGYM for 30 days");
         vm.stopPrank();
 
         vm.startPrank(bob);
         stakeManager.deployBondPool();
-        console.log("Bob deployed his BondPool");
-        stakeManager.bond(1000 * 10 ** 18, 60 days);
+        bobBondPool = BondPool(stakeManager.bondPools(bob));
+        token.approve(address(bobBondPool), 1000 * 10 ** 18);
+        bobBondPool.bond(1000 * 10 ** 18, 60 days);
         console.log("Bob bonded 1000 DGYM for 60 days");
         vm.stopPrank();
 
