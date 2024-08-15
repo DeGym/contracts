@@ -16,6 +16,7 @@ contract BondPool {
         uint256 endTime;
         uint256 lastUpdateTime;
         uint256 rewardDebt;
+        bool isCompound;
     }
 
     address public immutable owner;
@@ -25,7 +26,12 @@ contract BondPool {
     Bond[] public bonds;
     uint256 public totalBondWeight;
 
-    event Bonded(uint256 amount, uint256 lockDuration);
+    event Bonded(
+        uint256 bondIndex,
+        uint256 amount,
+        uint256 lockDuration,
+        bool isCompound
+    );
     event Unbonded(uint256 bondIndex, uint256 amount);
     event RewardClaimed(uint256 bondIndex, uint256 reward);
     event BondExtended(uint256 bondIndex, uint256 additionalDuration);
@@ -66,14 +72,15 @@ contract BondPool {
                 startTime: block.timestamp,
                 endTime: endTime,
                 lastUpdateTime: block.timestamp,
-                rewardDebt: 0
+                rewardDebt: 0,
+                isCompound: true // All bonds are now auto-compound by default
             })
         );
 
         stakeManager.notifyWeightChange(totalBondWeight);
-        stakeManager.notifyStakeChange(totalBondWeight, true);
+        stakeManager.notifyStakeChange(_amount, true);
 
-        emit Bonded(_amount, _lockDuration);
+        emit Bonded(bonds.length - 1, _amount, _lockDuration, true);
     }
 
     function unbond(uint256 _bondIndex) external onlyOwner {
@@ -81,14 +88,12 @@ contract BondPool {
         Bond storage bond = bonds[_bondIndex];
         require(block.timestamp >= bond.endTime, "Lock period not ended");
 
-        uint256 amount = bond.amount;
-        uint256 weight = calculateWeight(
-            bond.amount,
-            bond.endTime - block.timestamp
-        );
+        uint256 amount = bond.amount + bond.rewardDebt;
+        uint256 weight = calculateWeight(amount, 0);
         totalBondWeight -= weight;
 
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransfer(msg.sender, bond.amount);
+        stakeManager.claimReward(msg.sender, bond.rewardDebt);
 
         // Remove the bond by swapping with the last element and popping
         bonds[_bondIndex] = bonds[bonds.length - 1];
@@ -107,56 +112,30 @@ contract BondPool {
         return _amount * Math.log2(_remainingLockDuration + 1 days);
     }
 
-    function extendBondPeriod(
-        uint256 _bondIndex,
-        uint256 _additionalDuration
-    ) external onlyOwner {
-        require(_bondIndex < bonds.length, "Invalid bond index");
-        Bond storage bond = bonds[_bondIndex];
-        require(block.timestamp < bond.endTime, "Bond has already ended");
+    function updateRewards(uint256 _rewardAmount) external onlyStakeManager {
+        if (totalBondWeight == 0) return;
 
-        uint256 oldWeight = calculateWeight(
-            bond.amount,
-            bond.endTime - block.timestamp
-        );
-        bond.endTime += _additionalDuration;
-        bond.lockDuration += _additionalDuration;
-        uint256 newWeight = calculateWeight(
-            bond.amount,
-            bond.endTime - block.timestamp
-        );
+        for (uint256 i = 0; i < bonds.length; i++) {
+            Bond storage bond = bonds[i];
+            uint256 weight = calculateWeight(
+                bond.amount + bond.rewardDebt,
+                bond.endTime - block.timestamp
+            );
+            uint256 reward = (_rewardAmount * weight) / totalBondWeight;
+            bond.rewardDebt += reward;
 
-        totalBondWeight = totalBondWeight - oldWeight + newWeight;
+            uint256 oldWeight = calculateWeight(
+                bond.amount + bond.rewardDebt - reward,
+                bond.endTime - block.timestamp
+            );
+            uint256 newWeight = calculateWeight(
+                bond.amount + bond.rewardDebt,
+                bond.endTime - block.timestamp
+            );
+            totalBondWeight = totalBondWeight - oldWeight + newWeight;
+        }
+
         stakeManager.notifyWeightChange(totalBondWeight);
-
-        emit BondExtended(_bondIndex, _additionalDuration);
-    }
-
-    function addToBond(
-        uint256 _bondIndex,
-        uint256 _additionalAmount
-    ) external onlyOwner {
-        require(_bondIndex < bonds.length, "Invalid bond index");
-        Bond storage bond = bonds[_bondIndex];
-        require(block.timestamp < bond.endTime, "Bond has already ended");
-
-        uint256 oldWeight = calculateWeight(
-            bond.amount,
-            bond.endTime - block.timestamp
-        );
-        bond.amount += _additionalAmount;
-        uint256 newWeight = calculateWeight(
-            bond.amount,
-            bond.endTime - block.timestamp
-        );
-
-        totalBondWeight = totalBondWeight - oldWeight + newWeight;
-        stakeManager.notifyWeightChange(totalBondWeight);
-        stakeManager.notifyStakeChange(_additionalAmount, true);
-
-        token.safeTransferFrom(msg.sender, address(this), _additionalAmount);
-
-        emit BondIncreased(_bondIndex, _additionalAmount);
     }
 
     function getTotalBondWeight() external view returns (uint256) {
@@ -165,35 +144,5 @@ contract BondPool {
 
     function getBondsCount() external view returns (uint256) {
         return bonds.length;
-    }
-
-    function updateRewards(uint256 _rewardAmount) external onlyStakeManager {
-        if (totalBondWeight == 0) return;
-
-        for (uint256 i = 0; i < bonds.length; i++) {
-            Bond storage bond = bonds[i];
-            uint256 weight = calculateWeight(
-                bond.amount,
-                bond.endTime - block.timestamp
-            );
-            uint256 reward = (_rewardAmount * weight) / totalBondWeight;
-            bond.rewardDebt += reward;
-        }
-    }
-
-    function claimReward(
-        uint256 _bondIndex
-    ) external onlyOwner returns (uint256) {
-        require(_bondIndex < bonds.length, "Invalid bond index");
-        Bond storage bond = bonds[_bondIndex];
-
-        uint256 reward = bond.rewardDebt;
-        bond.rewardDebt = 0;
-
-        if (reward > 0) {
-            emit RewardClaimed(_bondIndex, reward);
-        }
-
-        return reward;
     }
 }
