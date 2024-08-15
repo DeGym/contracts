@@ -10,7 +10,8 @@ contract BondPoolTest is Test {
     StakeManager public stakeManager;
     DeGymToken public token;
     BondPool public bondPool;
-    address public alice = address(0x1);
+    uint256 private alicePrivateKey = 0xa11ce;
+    address public alice = vm.addr(alicePrivateKey);
     address public owner = address(0x3);
 
     function setUp() public {
@@ -21,13 +22,49 @@ contract BondPoolTest is Test {
         token.mint(alice, 10000 * 10 ** 18);
         vm.stopPrank();
 
+        console.log("StakeManager address:", address(stakeManager));
+
         // Deploy BondPool for Alice
         vm.startPrank(alice);
         stakeManager.deployBondPool();
         bondPool = BondPool(stakeManager.bondPools(alice));
-        token.approve(address(bondPool), type(uint256).max);
-        console.log("Alice approved BondPool to spend her DGYM tokens");
+        _permitForBondPool(alice, alicePrivateKey);
         vm.stopPrank();
+
+        console.log("BondPool address:", address(bondPool));
+    }
+
+    function _permitForBondPool(address user, uint256 privateKey) internal {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = token.nonces(user);
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                token.DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+                        ),
+                        user,
+                        address(bondPool),
+                        type(uint256).max,
+                        nonce,
+                        deadline
+                    )
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        token.permit(
+            user,
+            address(bondPool),
+            type(uint256).max,
+            deadline,
+            v,
+            r,
+            s
+        );
     }
 
     function testBond() public {
@@ -39,9 +76,6 @@ contract BondPoolTest is Test {
 
         uint256 initialTotalWeight = bondPool.getTotalBondWeight();
         console.log("Initial total bond weight:", initialTotalWeight);
-
-        // Approve StakeManager to spend Alice's tokens
-        token.approve(address(stakeManager), amount);
 
         bondPool.bond(amount, lockDuration);
 
@@ -65,9 +99,6 @@ contract BondPoolTest is Test {
 
         uint256 amount = 1000 * 10 ** 18;
         uint256 lockDuration = 30 days;
-
-        // Approve StakeManager to spend Alice's tokens
-        token.approve(address(stakeManager), amount);
 
         bondPool.bond(amount, lockDuration);
 
