@@ -88,18 +88,16 @@ contract StakeManager {
         }
     }
 
-    function claimReward(uint256 _bondIndex) external {
+    function claimReward(address _recipient, uint256 _amount) external {
         require(bondPools[msg.sender] != address(0), "No bond pool found");
-        updateRewards();
+        require(
+            _amount <= totalUnclaimedRewards,
+            "Insufficient unclaimed rewards"
+        );
 
-        BondPool bondPool = BondPool(bondPools[msg.sender]);
-        uint256 rewardAmount = bondPool.claimReward(_bondIndex);
-
-        if (rewardAmount > 0) {
-            totalUnclaimedRewards -= rewardAmount;
-            token.mint(msg.sender, rewardAmount); // Now StakeManager can mint directly
-            emit RewardClaimed(msg.sender, rewardAmount);
-        }
+        totalUnclaimedRewards -= _amount;
+        token.mint(_recipient, _amount);
+        emit RewardClaimed(_recipient, _amount);
     }
 
     function getTotalBondWeight() external view returns (uint256) {
