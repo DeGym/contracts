@@ -189,9 +189,4 @@ contract Crowdfund is Ownable {
         );
         token.safeTransferFrom(owner(), vestingWallets[beneficiary], amount);
     }
-
-    function withdrawTokens() external onlyOwner {
-        uint256 balance = token.balanceOf(address(this));
-        token.safeTransfer(wallet, balance);
-    }
 }
