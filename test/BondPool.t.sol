@@ -14,35 +14,17 @@ contract BondPoolTest is Test {
     address public owner = address(0x3);
 
     function setUp() public {
-        console.log("Setting up test environment");
-
-        // Deploy DeGymToken
         vm.startPrank(owner);
         token = new DeGymToken(owner);
-        console.log("DeGymToken deployed at:", address(token));
-
-        // Deploy StakeManager with DeGymToken
         stakeManager = new StakeManager(address(token));
-        console.log("StakeManager deployed at:", address(stakeManager));
-
-        // Grant MINTER_ROLE to StakeManager
         token.grantRole(token.MINTER_ROLE(), address(stakeManager));
-        console.log("MINTER_ROLE granted to StakeManager");
-
-        // Fund Alice with DGYM tokens
         token.mint(alice, 10000 * 10 ** 18);
-        console.log("Alice funded with 10,000 DGYM tokens");
-
         vm.stopPrank();
 
         // Deploy BondPool for Alice
         vm.startPrank(alice);
-        token.approve(address(stakeManager), type(uint256).max);
         stakeManager.deployBondPool();
         bondPool = BondPool(stakeManager.bondPools(alice));
-        console.log("BondPool deployed at:", address(bondPool));
-
-        // Approve BondPool to spend Alice's tokens
         token.approve(address(bondPool), type(uint256).max);
         console.log("Alice approved BondPool to spend her DGYM tokens");
         vm.stopPrank();
@@ -58,6 +40,9 @@ contract BondPoolTest is Test {
         uint256 initialTotalWeight = bondPool.getTotalBondWeight();
         console.log("Initial total bond weight:", initialTotalWeight);
 
+        // Approve StakeManager to spend Alice's tokens
+        token.approve(address(stakeManager), amount);
+
         bondPool.bond(amount, lockDuration);
 
         uint256 finalTotalWeight = bondPool.getTotalBondWeight();
@@ -68,6 +53,9 @@ contract BondPoolTest is Test {
             "Total bond weight should increase after bonding"
         );
 
+        // Check that tokens were transferred to StakeManager
+        assertEq(token.balanceOf(address(stakeManager)), amount);
+
         vm.stopPrank();
     }
 
@@ -77,6 +65,9 @@ contract BondPoolTest is Test {
 
         uint256 amount = 1000 * 10 ** 18;
         uint256 lockDuration = 30 days;
+
+        // Approve StakeManager to spend Alice's tokens
+        token.approve(address(stakeManager), amount);
 
         bondPool.bond(amount, lockDuration);
 

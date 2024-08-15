@@ -100,6 +100,11 @@ contract StakeManager {
         emit RewardClaimed(_recipient, _amount);
     }
 
+    function transferToUser(address _user, uint256 _amount) external {
+        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+        token.safeTransfer(_user, _amount);
+    }
+
     function getTotalBondWeight() external view returns (uint256) {
         return totalBondWeight;
     }
