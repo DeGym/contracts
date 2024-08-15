@@ -12,6 +12,7 @@ contract StakeManager {
     DeGymToken public immutable token;
 
     mapping(address => address) public bondPools;
+    mapping(address => bool) public isBondPool;
     address[] public stakeholders;
     uint256 public totalStaked;
     uint256 public totalBondWeight;
@@ -25,6 +26,11 @@ contract StakeManager {
     event RewardsDistributed(uint256 totalReward);
     event RewardClaimed(address indexed stakeholder, uint256 amount);
 
+    modifier onlyBondPool() {
+        require(isBondPool[msg.sender], "Caller is not a valid BondPool");
+        _;
+    }
+
     constructor(address _token) {
         token = DeGymToken(_token);
         lastUpdateTime = block.timestamp;
@@ -37,6 +43,7 @@ contract StakeManager {
         );
         BondPool bondPool = new BondPool(msg.sender, address(this), token);
         bondPools[msg.sender] = address(bondPool);
+        isBondPool[address(bondPool)] = true;
         stakeholders.push(msg.sender);
         emit BondPoolDeployed(msg.sender, address(bondPool));
     }
@@ -74,13 +81,14 @@ contract StakeManager {
         emit RewardsDistributed(totalReward);
     }
 
-    function notifyWeightChange(uint256 _newWeight) external {
-        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+    function notifyWeightChange(uint256 _newWeight) external onlyBondPool {
         totalBondWeight = _newWeight;
     }
 
-    function notifyStakeChange(uint256 _amount, bool _isIncrease) external {
-        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+    function notifyStakeChange(
+        uint256 _amount,
+        bool _isIncrease
+    ) external onlyBondPool {
         if (_isIncrease) {
             totalStaked += _amount;
         } else {
@@ -88,8 +96,10 @@ contract StakeManager {
         }
     }
 
-    function claimReward(address _recipient, uint256 _amount) external {
-        require(bondPools[msg.sender] != address(0), "No bond pool found");
+    function claimReward(
+        address _recipient,
+        uint256 _amount
+    ) external onlyBondPool {
         require(
             _amount <= totalUnclaimedRewards,
             "Insufficient unclaimed rewards"
@@ -100,8 +110,10 @@ contract StakeManager {
         emit RewardClaimed(_recipient, _amount);
     }
 
-    function transferToUser(address _user, uint256 _amount) external {
-        require(bondPools[msg.sender] != address(0), "Not a valid bond pool");
+    function transferToUser(
+        address _user,
+        uint256 _amount
+    ) external onlyBondPool {
         token.safeTransfer(_user, _amount);
     }
 
