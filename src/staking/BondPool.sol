@@ -5,8 +5,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import {StakeManager} from "./StakeManager.sol";
 import {DeGymToken} from "../token/DGYM.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BondPool {
+contract BondPool is Ownable {
     using SafeERC20 for DeGymToken;
 
     struct Bond {
@@ -19,7 +20,6 @@ contract BondPool {
         bool isCompound;
     }
 
-    address public immutable owner;
     StakeManager public immutable stakeManager;
     DeGymToken public immutable token;
 
@@ -37,15 +37,13 @@ contract BondPool {
     event BondExtended(uint256 bondIndex, uint256 additionalDuration);
     event BondIncreased(uint256 bondIndex, uint256 additionalAmount);
 
-    constructor(address _owner, address _stakeManager, DeGymToken _token) {
-        owner = _owner;
+    constructor(
+        address _owner,
+        address _stakeManager,
+        DeGymToken _token
+    ) Ownable(_owner) {
         stakeManager = StakeManager(_stakeManager);
         token = _token;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function");
-        _;
     }
 
     modifier onlyStakeManager() {
