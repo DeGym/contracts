@@ -5,8 +5,8 @@ import "forge-std/Test.sol";
 import {DeGymGovernor, IGovernor} from "../src/Governor.sol";
 import {DeGymToken} from "../src/token/DGYM.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import "../src/staking/StakeManager.sol";
-import "../src/staking/BondPool.sol";
+import {StakeManager} from "../src/staking/StakeManager.sol";
+import {BondPool} from "../src/staking/BondPool.sol";
 
 contract GovernorTest is Test {
     DeGymGovernor public governor;
