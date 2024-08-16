@@ -83,16 +83,40 @@ contract StakeManagerTest is Test {
     }
 
     function testOnlyBondPoolCanCallRestrictedFunctions() public {
-        vm.expectRevert("Caller is not a valid BondPool");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                stakeManager.BOND_POOL_ROLE()
+            )
+        );
         stakeManager.notifyWeightChange(1000);
 
-        vm.expectRevert("Caller is not a valid BondPool");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                stakeManager.BOND_POOL_ROLE()
+            )
+        );
         stakeManager.notifyStakeChange(1000, true);
 
-        vm.expectRevert("Caller is not a valid BondPool");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                stakeManager.BOND_POOL_ROLE()
+            )
+        );
         stakeManager.claimReward(alice, 1000);
 
-        vm.expectRevert("Caller is not a valid BondPool");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                stakeManager.BOND_POOL_ROLE()
+            )
+        );
         stakeManager.transferToUser(alice, 1000);
     }
 

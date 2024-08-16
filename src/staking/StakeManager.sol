@@ -13,7 +13,6 @@ contract StakeManager is AccessControl {
     DeGymToken public immutable token;
 
     mapping(address => address) public bondPools;
-    mapping(address => bool) public isBondPool;
     address[] public stakeholders;
     uint256 public totalStaked;
     uint256 public totalBondWeight;
@@ -24,17 +23,13 @@ contract StakeManager is AccessControl {
     uint256 public basisPoints;
 
     bytes32 public constant GOVERNOR_ROLE = keccak256("GOVERNOR_ROLE");
+    bytes32 public constant BOND_POOL_ROLE = keccak256("BOND_POOL_ROLE");
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event RewardsDistributed(uint256 totalReward);
     event RewardClaimed(address indexed stakeholder, uint256 amount);
     event DecayConstantUpdated(uint256 newValue);
     event BasisPointsUpdated(uint256 newValue);
-
-    modifier onlyBondPool() {
-        require(isBondPool[msg.sender], "Caller is not a valid BondPool");
-        _;
-    }
 
     constructor(address _token, address _timelock) {
         token = DeGymToken(_token);
@@ -51,7 +46,7 @@ contract StakeManager is AccessControl {
         );
         BondPool bondPool = new BondPool(msg.sender, address(this), token);
         bondPools[msg.sender] = address(bondPool);
-        isBondPool[address(bondPool)] = true;
+        _grantRole(BOND_POOL_ROLE, address(bondPool));
         stakeholders.push(msg.sender);
         emit BondPoolDeployed(msg.sender, address(bondPool));
     }
@@ -91,14 +86,16 @@ contract StakeManager is AccessControl {
         emit RewardsDistributed(totalReward);
     }
 
-    function notifyWeightChange(uint256 _newWeight) external onlyBondPool {
+    function notifyWeightChange(
+        uint256 _newWeight
+    ) external onlyRole(BOND_POOL_ROLE) {
         totalBondWeight = _newWeight;
     }
 
     function notifyStakeChange(
         uint256 _amount,
         bool _isIncrease
-    ) external onlyBondPool {
+    ) external onlyRole(BOND_POOL_ROLE) {
         if (_isIncrease) {
             totalStaked += _amount;
         } else {
@@ -109,7 +106,7 @@ contract StakeManager is AccessControl {
     function claimReward(
         address _recipient,
         uint256 _amount
-    ) external onlyBondPool {
+    ) external onlyRole(BOND_POOL_ROLE) {
         require(
             _amount <= totalUnclaimedRewards,
             "Insufficient unclaimed rewards"
@@ -123,7 +120,7 @@ contract StakeManager is AccessControl {
     function transferToUser(
         address _user,
         uint256 _amount
-    ) external onlyBondPool {
+    ) external onlyRole(BOND_POOL_ROLE) {
         token.safeTransfer(_user, _amount);
     }
 
