@@ -57,7 +57,7 @@ contract BondPool {
     function bond(uint256 _amount, uint256 _lockDuration) external onlyOwner {
         require(_amount > 0, "Amount must be greater than 0");
 
-        // Transfer tokens from user to StakeManager
+        // Use safeTransferFrom instead of transferFrom
         token.safeTransferFrom(msg.sender, address(stakeManager), _amount);
 
         uint256 endTime = block.timestamp + _lockDuration;

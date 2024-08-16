@@ -17,54 +17,20 @@ contract BondPoolTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         token = new DeGymToken(owner);
-        stakeManager = new StakeManager(address(token));
+        stakeManager = new StakeManager(address(token), owner);
         token.grantRole(token.MINTER_ROLE(), address(stakeManager));
-        token.mint(alice, 10000 * 10 ** 18);
+        token.mint(alice, 1_000_000_000 * 10 ** 18);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        token.approve(address(stakeManager), type(uint256).max);
+        stakeManager.deployBondPool();
+        bondPool = BondPool(stakeManager.bondPools(alice));
+        token.approve(address(bondPool), type(uint256).max);
         vm.stopPrank();
 
         console.log("StakeManager address:", address(stakeManager));
-
-        // Deploy BondPool for Alice
-        vm.startPrank(alice);
-        stakeManager.deployBondPool();
-        bondPool = BondPool(stakeManager.bondPools(alice));
-        _permitForBondPool(alice, alicePrivateKey);
-        vm.stopPrank();
-
         console.log("BondPool address:", address(bondPool));
-    }
-
-    function _permitForBondPool(address user, uint256 privateKey) internal {
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = token.nonces(user);
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                token.DOMAIN_SEPARATOR(),
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
-                        ),
-                        user,
-                        address(bondPool),
-                        type(uint256).max,
-                        nonce,
-                        deadline
-                    )
-                )
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
-        token.permit(
-            user,
-            address(bondPool),
-            type(uint256).max,
-            deadline,
-            v,
-            r,
-            s
-        );
     }
 
     function testBond() public {

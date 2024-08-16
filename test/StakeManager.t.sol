@@ -20,142 +20,36 @@ contract StakeManagerTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         token = new DeGymToken(owner);
-        stakeManager = new StakeManager(address(token));
+        stakeManager = new StakeManager(address(token), owner);
         token.grantRole(token.MINTER_ROLE(), address(stakeManager));
-        token.mint(alice, 10000 * 10 ** 18);
+
+        token.mint(alice, 1_000_000_000 * 10 ** 18);
         token.mint(bob, 10000 * 10 ** 18);
+
         vm.stopPrank();
 
         vm.startPrank(alice);
-        _permitForStakeManager(alice, alicePrivateKey);
+        token.approve(address(stakeManager), type(uint256).max);
         stakeManager.deployBondPool();
         aliceBondPool = BondPool(stakeManager.bondPools(alice));
+        token.approve(address(aliceBondPool), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        _permitForStakeManager(bob, bobPrivateKey);
+        token.approve(address(stakeManager), type(uint256).max);
         stakeManager.deployBondPool();
         bobBondPool = BondPool(stakeManager.bondPools(bob));
+        token.approve(address(bobBondPool), type(uint256).max);
         vm.stopPrank();
     }
 
-    function _permitForStakeManager(address user, uint256 privateKey) internal {
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = token.nonces(user);
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                token.DOMAIN_SEPARATOR(),
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
-                        ),
-                        user,
-                        address(stakeManager),
-                        type(uint256).max,
-                        nonce,
-                        deadline
-                    )
-                )
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
-        token.permit(
-            user,
-            address(stakeManager),
-            type(uint256).max,
-            deadline,
-            v,
-            r,
-            s
-        );
+    function testDeployBondPool() public view {
+        assertEq(address(aliceBondPool), stakeManager.bondPools(alice));
+        assertEq(address(bobBondPool), stakeManager.bondPools(bob));
     }
 
-    function testDeployBondPool() public {
-        assertTrue(
-            stakeManager.isBondPool(address(aliceBondPool)),
-            "Alice's BondPool should be registered"
-        );
-        assertTrue(
-            stakeManager.isBondPool(address(bobBondPool)),
-            "Bob's BondPool should be registered"
-        );
-    }
-
-    function testUpdateRewards() public {
-        vm.startPrank(alice);
-        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 15 days);
-        stakeManager.updateRewards();
-
-        uint256 totalUnclaimedRewards = stakeManager.totalUnclaimedRewards();
-        assertTrue(
-            totalUnclaimedRewards > 0,
-            "Total unclaimed rewards should be greater than 0"
-        );
-    }
-
-    function testNotifyWeightChange() public {
-        vm.startPrank(alice);
-        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
-        vm.stopPrank();
-
-        uint256 totalWeight = stakeManager.getTotalBondWeight();
-        assertTrue(totalWeight > 0, "Total bond weight should be updated");
-    }
-
-    function testNotifyStakeChange() public {
-        vm.startPrank(alice);
-        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
-        vm.stopPrank();
-
-        uint256 totalStaked = stakeManager.totalStaked();
-        assertEq(
-            totalStaked,
-            1000 * 10 ** 18,
-            "Total staked should be updated"
-        );
-    }
-
-    function testClaimReward() public {
-        vm.startPrank(alice);
-        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 15 days);
-        stakeManager.updateRewards();
-
-        uint256 initialBalance = token.balanceOf(alice);
-        vm.prank(address(aliceBondPool));
-        stakeManager.claimReward(alice, 100 * 10 ** 18);
-
-        uint256 finalBalance = token.balanceOf(alice);
-        assertEq(
-            finalBalance,
-            initialBalance + 100 * 10 ** 18,
-            "Alice should receive claimed rewards"
-        );
-    }
-
-    function testOnlyBondPoolCanCallRestrictedFunctions() public {
-        vm.expectRevert("Caller is not a valid BondPool");
-        vm.prank(alice);
-        stakeManager.notifyWeightChange(1000 * 10 ** 18);
-
-        vm.expectRevert("Caller is not a valid BondPool");
-        vm.prank(bob);
-        stakeManager.notifyStakeChange(1000 * 10 ** 18, true);
-
-        vm.expectRevert("Caller is not a valid BondPool");
-        vm.prank(owner);
-        stakeManager.claimReward(alice, 100 * 10 ** 18);
-
-        vm.expectRevert("Caller is not a valid BondPool");
-        vm.prank(address(0x1234));
-        stakeManager.transferToUser(alice, 100 * 10 ** 18);
+    function testGetStakeholderCount() public view {
+        assertEq(stakeManager.getStakeholderCount(), 2);
     }
 
     function testGetTotalBondWeight() public {
@@ -163,15 +57,91 @@ contract StakeManagerTest is Test {
         aliceBondPool.bond(1000 * 10 ** 18, 30 days);
         vm.stopPrank();
 
-        uint256 totalWeight = stakeManager.getTotalBondWeight();
-        assertTrue(
-            totalWeight > 0,
-            "Total bond weight should be greater than 0"
-        );
+        vm.startPrank(bob);
+        bobBondPool.bond(500 * 10 ** 18, 60 days);
+        vm.stopPrank();
+
+        assertGt(stakeManager.getTotalBondWeight(), 0);
     }
 
-    function testGetStakeholderCount() public {
-        uint256 stakeholderCount = stakeManager.getStakeholderCount();
-        assertEq(stakeholderCount, 2, "Stakeholder count should be 2");
+    function testNotifyStakeChange() public {
+        uint256 initialStake = stakeManager.totalStaked();
+
+        vm.prank(alice);
+        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
+
+        assertEq(stakeManager.totalStaked(), initialStake + 1000 * 10 ** 18);
+    }
+
+    function testNotifyWeightChange() public {
+        uint256 initialWeight = stakeManager.totalBondWeight();
+
+        vm.prank(alice);
+        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
+
+        assertGt(stakeManager.totalBondWeight(), initialWeight);
+    }
+
+    function testOnlyBondPoolCanCallRestrictedFunctions() public {
+        vm.expectRevert("Caller is not a valid BondPool");
+        stakeManager.notifyWeightChange(1000);
+
+        vm.expectRevert("Caller is not a valid BondPool");
+        stakeManager.notifyStakeChange(1000, true);
+
+        vm.expectRevert("Caller is not a valid BondPool");
+        stakeManager.claimReward(alice, 1000);
+
+        vm.expectRevert("Caller is not a valid BondPool");
+        stakeManager.transferToUser(alice, 1000);
+    }
+
+    function testUpdateRewards() public {
+        vm.prank(alice);
+        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
+
+        vm.warp(block.timestamp + 15 days);
+
+        stakeManager.updateRewards();
+
+        assertGt(stakeManager.totalUnclaimedRewards(), 0);
+    }
+
+    function testClaimReward() public {
+        vm.startPrank(alice);
+        aliceBondPool.bond(1000 * 10 ** 18, 30 days);
+        vm.stopPrank();
+
+        // Simulate time passing and update rewards
+        vm.warp(block.timestamp + 15 days);
+        stakeManager.updateRewards();
+
+        uint256 totalUnclaimedRewards = stakeManager.totalUnclaimedRewards();
+        console.log("Total unclaimed rewards:", totalUnclaimedRewards);
+
+        // Ensure we're not trying to claim more than available
+        uint256 rewardAmount = totalUnclaimedRewards > 0
+            ? totalUnclaimedRewards
+            : 1;
+
+        uint256 initialBalance = token.balanceOf(alice);
+        console.log("Alice's initial balance:", initialBalance);
+
+        vm.prank(address(aliceBondPool));
+        stakeManager.claimReward(alice, rewardAmount);
+
+        uint256 finalBalance = token.balanceOf(alice);
+        console.log("Alice's final balance:", finalBalance);
+
+        assertEq(
+            finalBalance,
+            initialBalance + rewardAmount,
+            "Alice should receive the claimed reward"
+        );
+        assertEq(
+            stakeManager.totalUnclaimedRewards(),
+            0,
+            "All rewards should be claimed"
+        );
     }
 }

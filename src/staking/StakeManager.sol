@@ -3,10 +3,11 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./BondPool.sol";
 import {DeGymToken} from "../token/DGYM.sol";
 
-contract StakeManager {
+contract StakeManager is AccessControl {
     using SafeERC20 for DeGymToken;
 
     DeGymToken public immutable token;
@@ -19,21 +20,28 @@ contract StakeManager {
     uint256 public lastUpdateTime;
     uint256 public totalUnclaimedRewards;
 
-    uint256 public constant DECAY_CONSTANT = 46; // 0.046% daily decay
-    uint256 public constant BASIS_POINTS = 10000;
+    uint256 public decayConstant;
+    uint256 public basisPoints;
+
+    bytes32 public constant GOVERNOR_ROLE = keccak256("GOVERNOR_ROLE");
 
     event BondPoolDeployed(address indexed stakeholder, address bondPool);
     event RewardsDistributed(uint256 totalReward);
     event RewardClaimed(address indexed stakeholder, uint256 amount);
+    event DecayConstantUpdated(uint256 newValue);
+    event BasisPointsUpdated(uint256 newValue);
 
     modifier onlyBondPool() {
         require(isBondPool[msg.sender], "Caller is not a valid BondPool");
         _;
     }
 
-    constructor(address _token) {
+    constructor(address _token, address _timelock) {
         token = DeGymToken(_token);
         lastUpdateTime = block.timestamp;
+        decayConstant = 46; // Initial value: 0.046% daily decay
+        basisPoints = 10000; // Initial value: 10000
+        _grantRole(GOVERNOR_ROLE, _timelock);
     }
 
     function deployBondPool() external {
@@ -51,7 +59,7 @@ contract StakeManager {
     function calculateInflationRate() public view returns (uint256) {
         uint256 currentSupply = token.totalSupply() + totalUnclaimedRewards;
         uint256 maxSupply = token.cap();
-        return (DECAY_CONSTANT * (maxSupply - currentSupply)) / maxSupply;
+        return (decayConstant * (maxSupply - currentSupply)) / maxSupply;
     }
 
     function updateRewards() public {
@@ -64,7 +72,7 @@ contract StakeManager {
         uint256 timePassed = block.timestamp - lastUpdateTime;
         uint256 inflationRate = calculateInflationRate();
         uint256 totalReward = (totalStaked * inflationRate * timePassed) /
-            (365 days * BASIS_POINTS);
+            (365 days * basisPoints);
 
         totalUnclaimedRewards += totalReward;
 
@@ -72,9 +80,11 @@ contract StakeManager {
             address stakeholder = stakeholders[i];
             BondPool bondPool = BondPool(bondPools[stakeholder]);
             uint256 stakeholderWeight = bondPool.getTotalBondWeight();
-            uint256 stakeholderReward = (totalReward * stakeholderWeight) /
-                totalBondWeight;
-            bondPool.updateRewards(stakeholderReward);
+            if (totalBondWeight > 0) {
+                uint256 stakeholderReward = (totalReward * stakeholderWeight) /
+                    totalBondWeight;
+                bondPool.updateRewards(stakeholderReward);
+            }
         }
 
         lastUpdateTime = block.timestamp;
@@ -123,5 +133,19 @@ contract StakeManager {
 
     function getStakeholderCount() external view returns (uint256) {
         return stakeholders.length;
+    }
+
+    function setDecayConstant(
+        uint256 _newValue
+    ) external onlyRole(GOVERNOR_ROLE) {
+        decayConstant = _newValue;
+        emit DecayConstantUpdated(_newValue);
+    }
+
+    function setBasisPoints(
+        uint256 _newValue
+    ) external onlyRole(GOVERNOR_ROLE) {
+        basisPoints = _newValue;
+        emit BasisPointsUpdated(_newValue);
     }
 }
