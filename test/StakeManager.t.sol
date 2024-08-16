@@ -2,9 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/staking/StakeManager.sol";
-import "../src/staking/BondPool.sol";
+import {StakeManager} from "../src/staking/StakeManager.sol";
+import {BondPool} from "../src/staking/BondPool.sol";
 import {DeGymToken} from "../src/token/DGYM.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract StakeManagerTest is Test {
     StakeManager public stakeManager;

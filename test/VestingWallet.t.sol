@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import {DeGymToken} from "../src/token/DGYM.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract VestingWalletTest is Test {
     DeGymToken token;

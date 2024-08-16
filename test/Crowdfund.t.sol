@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/token/Crowdfund.sol";
+import {Crowdfund} from "../src/token/Crowdfund.sol";
 import {DeGymToken} from "../src/token/DGYM.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 
