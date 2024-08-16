@@ -42,6 +42,7 @@ contract GovernorTest is Test {
         token.mint(deployer, 51_000_000e18);
         token.mint(voter1, 850_000_000e18);
         token.mint(voter2, 51_000_000e18);
+        token.mint(voter1, 1_000_000e18); // Mint 1 million tokens to voter1
 
         vm.warp(block.timestamp + 1);
         governor = new DeGymGovernor(token, timelock);
@@ -155,6 +156,9 @@ contract GovernorTest is Test {
 
         uint256 amount = 1000 * 10 ** 18;
         uint256 lockDuration = 30 days;
+
+        // Approve the BondPool to spend tokens on behalf of voter1
+        token.approve(address(bondPool), amount);
 
         uint256 initialTotalWeight = bondPool.getTotalBondWeight();
         bondPool.bond(amount, lockDuration);
