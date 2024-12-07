@@ -8,7 +8,6 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
-import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
@@ -70,10 +69,10 @@ contract DeGymToken is
 
     uint256 private _cap = 10_000_000_000e18;
 
-    address public ecosystemDevelopmentVestingWallet;
-    address public teamGrowthVestingWallet;
-    address public communityEngagementVestingWallet;
-    address public marketingPromotionVestingWallet;
+    address public ecosystemDevelopmentWallet;
+    address public teamGrowthWallet;
+    address public communityEngagementWallet;
+    address public marketingPromotionWallet;
 
     event CapUpdated(uint256 newCap);
 
@@ -89,39 +88,15 @@ contract DeGymToken is
         _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
         _grantRole(MINTER_ROLE, initialOwner);
 
-        ecosystemDevelopmentVestingWallet = address(
-            new VestingWallet(
-                0x609D40C1d5750ff03a3CafF30152AD03243c02cB,
-                uint64(block.timestamp + 30 days), // 1 month cliff
-                uint64(11 * 30 days) // Vesting over 11 months
-            )
-        );
-        teamGrowthVestingWallet = address(
-            new VestingWallet(
-                0xaDcB2f54F652BFD7Ac1d7D7b12213b4519F0265D,
-                uint64(block.timestamp + 30 days), // 1 month cliff
-                uint64(11 * 30 days) // Vesting over 11 months
-            )
-        );
-        communityEngagementVestingWallet = address(
-            new VestingWallet(
-                0x139780E08d3DAF2f72D10ccC635593cDB301B4bC,
-                uint64(block.timestamp + 14 days), // 2 weeks cliff
-                uint64(11 * 30 days) // Vesting over 11 months
-            )
-        );
-        marketingPromotionVestingWallet = address(
-            new VestingWallet(
-                0x6BC8906aD6369bD5cfe7B4f2f181f0759A3D53b6,
-                uint64(block.timestamp + 30 days), // 1 month cliff
-                uint64(11 * 30 days) // Vesting over 11 months
-            )
-        );
+        ecosystemDevelopmentWallet = 0x609D40C1d5750ff03a3CafF30152AD03243c02cB;
+        teamGrowthWallet = 0xaDcB2f54F652BFD7Ac1d7D7b12213b4519F0265D;
+        communityEngagementWallet = 0x139780E08d3DAF2f72D10ccC635593cDB301B4bC;
+        marketingPromotionWallet = 0x6BC8906aD6369bD5cfe7B4f2f181f0759A3D53b6;
 
-        _mint(ecosystemDevelopmentVestingWallet, ecosystemDevelopment);
-        _mint(teamGrowthVestingWallet, teamGrowth);
-        _mint(communityEngagementVestingWallet, communityEngagement);
-        _mint(marketingPromotionVestingWallet, marketingPromotion);
+        _mint(ecosystemDevelopmentWallet, ecosystemDevelopment);
+        _mint(teamGrowthWallet, teamGrowth);
+        _mint(communityEngagementWallet, communityEngagement);
+        _mint(marketingPromotionWallet, marketingPromotion);
         _mint(msg.sender, _remainingTokens);
     }
 

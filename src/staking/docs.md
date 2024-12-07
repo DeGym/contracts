@@ -1,6 +1,27 @@
 # StakeManager and BondPool Frontend Integration Guide
 
-This guide provides instructions for integrating the StakeManager and BondPool contracts with a Next.js frontend using MetaMask and web3.js.
+This guide provides comprehensive instructions for integrating the StakeManager and BondPool contracts with a Next.js frontend using MetaMask and web3.js.
+
+## Contract Overview
+
+### StakeManager
+
+The StakeManager contract is responsible for managing the overall staking system. It handles the deployment of BondPools, tracks total staked amounts and bond weights, and manages reward distribution.
+
+Key features:
+- Deploy individual BondPools for users
+- Update and distribute rewards
+- Manage global staking parameters (decay constant, basis points)
+
+### BondPool
+
+The BondPool contract represents an individual user's staking pool. It allows users to create bonds, unbond their tokens, and manage their rewards.
+
+Key features:
+- Create bonds with specific amounts and lock durations
+- Unbond tokens after the lock period
+- Calculate and update bond weights
+- Manage individual user rewards
 
 ## Setup
 
@@ -37,6 +58,12 @@ This guide provides instructions for integrating the StakeManager and BondPool c
    - `src/contracts/BondPool.json`
 
    Populate these files with the respective contract ABIs.
+
+4. Create a configuration file `src/config.js` to store contract addresses:
+   ```javascript
+   export const STAKE_MANAGER_ADDRESS = '0x...'; // Replace with actual address
+   export const TOKEN_ADDRESS = '0x...'; // Replace with actual address
+   ```
 
 ## UI Structure
 
@@ -331,3 +358,39 @@ export default function ClaimRewards({ account, stakeManager }) {
     </div>
   );
 }
+```
+## Integration Steps
+
+1. Set up the Next.js project and install dependencies.
+2. Create the utility files (`web3.js`, `config.js`) and components as described above.
+3. In your main page or app component, use the `ConnectWallet` component to handle wallet connection.
+4. Once connected, initialize the `StakeManager` component.
+5. Use the `CreateBondPool` component to allow users to create their BondPool if they don't have one.
+6. After a BondPool is created, initialize the `BondPool` component with the user's BondPool address.
+7. Use the `Bond`, `Unbond`, and `ClaimRewards` components within the `BondPool` component to allow users to interact with their BondPool.
+
+Remember to handle error states, loading indicators, and success messages appropriately in your UI to provide a smooth user experience.
+
+## Security Considerations
+
+- Always use `SafeERC20` functions when interacting with ERC20 tokens.
+- Implement proper access control in your smart contracts (as done with `onlyRole` modifiers).
+- Validate user inputs both on the frontend and in smart contracts.
+- Consider implementing a circuit breaker or pause mechanism in case of emergencies.
+- Regularly update dependencies and conduct security audits.
+
+## Testing
+
+Ensure comprehensive testing of both smart contracts and frontend components:
+
+- Use Foundry for smart contract testing (as seen in the provided test files).
+- Implement unit tests for React components using tools like Jest and React Testing Library.
+- Conduct integration tests to ensure proper interaction between the frontend and smart contracts.
+
+## Deployment
+
+1. Deploy the `DeGymToken`, `StakeManager`, and other necessary contracts to your chosen network.
+2. Update the `config.js` file with the deployed contract addresses.
+3. Build and deploy your Next.js application to a hosting service of your choice.
+
+Remember to test thoroughly on testnets before deploying to mainnet.

@@ -72,3 +72,14 @@ chmod +x set-env.sh
 ```sh
 source ./set-env.sh
 ```
+
+
+### Deploy
+
+```shell
+# Deploy to testnet
+./deploy.sh testnet
+
+# Deploy to mainnet
+./deploy.sh mainnet
+```
