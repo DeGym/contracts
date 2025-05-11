@@ -20,17 +20,17 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
     GymNFT public gymNFT;
     ITreasury public treasuryContract;
 
-    // Voucher structure
+    // Voucher structure otimizada para packed storage
     struct Voucher {
-        uint8 tier;
-        uint256 duration;
-        uint256 expiryDate;
-        int8 timezone;
-        uint256 dcpBalance;
-        uint256 lastDcpResetTime;
-        uint256 dcpLastConsumed;
-        uint256 issueDate;
-        address paymentToken;
+        uint8 tier; // 1 byte
+        int8 timezone; // 1 byte
+        uint40 expiryDate; // 5 bytes - Suficiente até 2100+
+        uint40 issueDate; // 5 bytes
+        uint40 lastDcpResetTime; // 5 bytes
+        uint128 dcpBalance; // 16 bytes - Mais que suficiente mesmo para tiers altos
+        uint128 dcpLastConsumed; // 16 bytes
+        uint16 duration; // 2 bytes - Em dias, max ~179 anos
+        address paymentToken; // 20 bytes - Não pode ser packed com os outros
     }
 
     // Check-in structure
@@ -57,7 +57,10 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
     event VoucherCreated(
         uint256 indexed tokenId,
         address indexed owner,
-        uint8 tier
+        uint8 tier,
+        uint16 duration,
+        int8 timezone,
+        address paymentToken
     );
     event VoucherExtended(uint256 indexed tokenId, uint256 additionalDuration);
     event VoucherUpgraded(uint256 indexed tokenId, uint8 newTier);
@@ -66,70 +69,92 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         uint256 indexed gymId,
         uint256 timestamp
     );
-    event DCPReset(uint256 indexed tokenId, uint256 newDcpBalance);
-    event DCPConsumed(uint256 indexed tokenId, uint256 amount, uint256 gymId);
+    event DCPReset(uint256 indexed tokenId, uint128 newBalance);
+    event DCPConsumed(
+        uint256 indexed tokenId,
+        uint256 indexed gymId,
+        uint128 amount
+    );
 
     /**
      * @dev Constructor
-     * @param _treasury Address of the Treasury contract
-     * @param _gymManager Address of the GymManager contract
-     * @param _gymNFT Address of the GymNFT contract
-     * @param _treasuryContract Address of the Treasury contract
+     * @param _treasuryAddress Address of the Treasury contract
+     * @param _gymManagerAddress Address of the GymManager contract
+     * @param _gymNFTAddress Address of the GymNFT contract
+     * @param _treasuryContractAddress Address of the ITreasury contract
      */
     constructor(
-        address _treasury,
-        address _gymManager,
-        address _gymNFT,
-        address _treasuryContract
-    ) ERC721("DeGym Membership Voucher", "DGYMV") Ownable(msg.sender) {
-        treasury = Treasury(_treasury);
-        gymManager = GymManager(_gymManager);
-        gymNFT = GymNFT(_gymNFT);
-        treasuryContract = ITreasury(_treasuryContract);
+        address _treasuryAddress,
+        address _gymManagerAddress,
+        address _gymNFTAddress,
+        address _treasuryContractAddress
+    ) ERC721("DeGym Voucher", "DGV") Ownable(msg.sender) {
+        treasury = Treasury(_treasuryAddress);
+        gymManager = GymManager(_gymManagerAddress);
+        gymNFT = GymNFT(_gymNFTAddress);
+        treasuryContract = ITreasury(_treasuryContractAddress);
     }
 
     /**
-     * @dev Creates a new voucher NFT
-     * @param tier Tier level of the voucher (1-99)
-     * @param duration Duration of the voucher in days
-     * @param timezone User timezone offset (-12 to +14)
-     * @param tokenAddress Address of token used for payment
-     * @return tokenId The ID of the newly minted NFT
+     * @dev Creates a new voucher
+     * @param tier Tier level (1-99)
+     * @param duration Duration in days
+     * @param timezone User's timezone (-12 to 14)
+     * @param tokenAddress Address of the token used for payment
+     * @return tokenId ID of the created voucher
      */
     function mint(
         uint8 tier,
         uint256 duration,
         int8 timezone,
         address tokenAddress
-    ) external returns (uint256 tokenId) {
+    ) external returns (uint256) {
         require(tier > 0 && tier <= 99, "Invalid tier");
-        require(duration > 0, "Duration must be greater than zero");
+        require(duration > 0, "Invalid duration");
         require(timezone >= -12 && timezone <= 14, "Invalid timezone");
+        require(
+            treasuryContract.isTokenAccepted(tokenAddress),
+            "Token not accepted"
+        );
 
+        // Calculate voucher price
         uint256 price = treasury.calculatePrice(tokenAddress, tier, duration);
 
         // Logic to handle token payment via Treasury would be here
         // For now, just assume payment is processed elsewhere
 
-        tokenId = _nextTokenId++;
+        // Generate new token ID
+        uint256 tokenId = _nextTokenId++;
+
+        // Calculate expiry date and DCP balance
+        uint256 expiryDateCalc = block.timestamp + (duration * 1 days);
+        uint128 dcpBalance = uint128(calculateDailyDCP(tier)); // Convert to uint128 safely
+
+        // Mint NFT
         _mint(msg.sender, tokenId);
 
-        uint256 expiryDate = block.timestamp + (duration * 1 days);
-        uint256 dcpBalance = calculateDailyDCP(tier);
-
+        // Store voucher details with proper type conversions
         vouchers[tokenId] = Voucher({
             tier: tier,
-            duration: duration,
-            expiryDate: expiryDate,
+            duration: uint16(duration), // Convert to uint16
+            expiryDate: uint40(expiryDateCalc), // Convert to uint40
             timezone: timezone,
             dcpBalance: dcpBalance,
-            lastDcpResetTime: _getTodayStartTimestamp(timezone),
+            lastDcpResetTime: uint40(_getTodayStartTimestamp(timezone)), // Convert to uint40
             dcpLastConsumed: 0,
-            issueDate: block.timestamp,
+            issueDate: uint40(block.timestamp), // Convert to uint40
             paymentToken: tokenAddress
         });
 
-        emit VoucherCreated(tokenId, msg.sender, tier);
+        emit VoucherCreated(
+            tokenId,
+            msg.sender,
+            tier,
+            uint16(duration),
+            timezone,
+            tokenAddress
+        );
+
         return tokenId;
     }
 
@@ -137,7 +162,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
      * @dev Extends the duration of a voucher
      * @param tokenId ID of the voucher to extend
      * @param additionalDuration Additional duration in days
-     * @param tokenAddress Address of token used for payment
+     * @param tokenAddress Address of the token used for payment
      */
     function extendVoucher(
         uint256 tokenId,
@@ -148,14 +173,15 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
             _isApprovedOrOwner(msg.sender, tokenId),
             "Not approved or owner"
         );
-        require(
-            additionalDuration > 0,
-            "Additional duration must be greater than zero"
-        );
         require(validateVoucher(tokenId), "Voucher is expired");
+        require(additionalDuration > 0, "Invalid additional duration");
+
+        // Ensure additionalDuration doesn't exceed uint16 max
+        require(additionalDuration <= type(uint16).max, "Duration too large");
 
         Voucher storage voucher = vouchers[tokenId];
 
+        // Calculate price for extension
         uint256 price = treasury.calculatePrice(
             tokenAddress,
             voucher.tier,
@@ -165,59 +191,10 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         // Logic to handle token payment via Treasury would be here
         // For now, just assume payment is processed elsewhere
 
-        voucher.duration += additionalDuration;
-        voucher.expiryDate += (additionalDuration * 1 days);
+        voucher.duration += uint16(additionalDuration);
+        voucher.expiryDate += uint40(additionalDuration * 1 days);
 
         emit VoucherExtended(tokenId, additionalDuration);
-    }
-
-    /**
-     * @dev Upgrades the tier of a voucher
-     * @param tokenId ID of the voucher to upgrade
-     * @param newTier New tier level (must be higher than current)
-     * @param tokenAddress Address of token used for payment
-     */
-    function upgradeVoucher(
-        uint256 tokenId,
-        uint8 newTier,
-        address tokenAddress
-    ) external {
-        require(
-            _isApprovedOrOwner(msg.sender, tokenId),
-            "Not approved or owner"
-        );
-        require(validateVoucher(tokenId), "Voucher is expired");
-
-        Voucher storage voucher = vouchers[tokenId];
-        require(newTier > voucher.tier, "New tier must be higher than current");
-        require(newTier <= 99, "Invalid tier");
-
-        // Calculate remaining duration in days
-        uint256 remainingDuration = (voucher.expiryDate - block.timestamp) /
-            1 days;
-
-        // Calculate price difference for upgrade
-        uint256 newPrice = treasury.calculatePrice(
-            tokenAddress,
-            newTier,
-            remainingDuration
-        );
-        uint256 oldPrice = treasury.calculatePrice(
-            tokenAddress,
-            voucher.tier,
-            remainingDuration
-        );
-        uint256 priceDifference = newPrice > oldPrice ? newPrice - oldPrice : 0;
-
-        // Logic to handle token payment via Treasury would be here
-        // For now, just assume payment is processed elsewhere
-
-        voucher.tier = newTier;
-
-        // Reset DCP to new tier value
-        _resetDailyDCP(tokenId);
-
-        emit VoucherUpgraded(tokenId, newTier);
     }
 
     /**
@@ -241,214 +218,169 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
             _resetDailyDCP(tokenId);
         }
 
-        // Calculate DCP consumption based on gym tier
-        // In a real implementation, we would get the gym tier from GymNFT
-        uint8 gymTier = 1; // Placeholder, replace with actual gym tier lookup
-        uint256 dcpRequired = calculateGymDCPRequirement(gymTier);
+        // Get gym tier
+        uint8 gymTier = gymNFT.getCurrentTier(gymId);
+
+        // Calculate DCP required for check-in (2^gym_tier)
+        uint128 dcpRequired = uint128(calculateDCP(gymTier));
 
         // Check if user has enough DCP
         require(voucher.dcpBalance >= dcpRequired, "Insufficient DCP balance");
 
-        // Check if user has reached the daily limit for this gym
-        uint256 today = _getTodayAsNumber(voucher.timezone);
-        require(
-            checkInsPerGymPerDay[tokenId][today][gymId] < voucher.tier,
-            "Daily check-in limit reached for this gym"
-        );
+        // Check today's date in user's timezone
+        uint256 today = _getTodayStartTimestamp(voucher.timezone);
 
-        // Update DCP balance
+        // Update DCP balance with proper type conversions
         voucher.dcpBalance -= dcpRequired;
         voucher.dcpLastConsumed = dcpRequired;
 
         // Record check-in
         checkInsPerGymPerDay[tokenId][today][gymId]++;
+
+        // Add to check-in history
         checkInHistory[tokenId].push(
             CheckInRecord({gymId: gymId, timestamp: block.timestamp})
         );
 
+        // Notify GymNFT about the check-in
+        gymNFT.receiveDCP(gymId, dcpRequired);
+
         emit CheckInCreated(tokenId, gymId, block.timestamp);
-        emit DCPConsumed(tokenId, dcpRequired, gymId);
+        emit DCPConsumed(tokenId, gymId, dcpRequired);
 
         return true;
     }
 
     /**
-     * @dev Calculates the daily DCP allocation based on voucher tier
-     * @param tier Tier level of the voucher
-     * @return amount Daily DCP amount
-     */
-    function calculateDailyDCP(
-        uint8 tier
-    ) public pure returns (uint256 amount) {
-        // DCP = 2^tier
-        if (tier >= 128) {
-            return MAX_DCP; // Avoid overflow
-        }
-        return 1 << tier; // 2^tier using bit shift
-    }
-
-    /**
-     * @dev Calculates the DCP requirement for a gym based on tier
-     * @param gymTier Tier level of the gym
-     * @return amount DCP required to check in
-     */
-    function calculateGymDCPRequirement(
-        uint8 gymTier
-    ) public pure returns (uint256 amount) {
-        // DCP required = 2^gymTier
-        if (gymTier >= 128) {
-            return MAX_DCP; // Avoid overflow
-        }
-        return 1 << gymTier; // 2^gymTier using bit shift
-    }
-
-    /**
-     * @dev Validates if a voucher is still valid (not expired)
-     * @param tokenId ID of the voucher to validate
-     * @return isValid True if the voucher is valid
-     */
-    function validateVoucher(
-        uint256 tokenId
-    ) public view returns (bool isValid) {
-        require(_exists(tokenId), "Voucher does not exist");
-        return vouchers[tokenId].expiryDate >= block.timestamp;
-    }
-
-    /**
-     * @dev Checks if a voucher has sufficient DCP for a specific gym
+     * @dev Calculate number of check-ins for a voucher at a gym on a specific day
      * @param tokenId ID of the voucher
-     * @param gymTier Tier of the gym
-     * @return hasEnough True if the voucher has enough DCP
+     * @param timestamp Timestamp for the day
+     * @param gymId ID of the gym
+     * @return count Number of check-ins
      */
-    function hasSufficientDCP(
+    function getCheckInsForDay(
         uint256 tokenId,
-        uint8 gymTier
-    ) public view returns (bool hasEnough) {
-        require(_exists(tokenId), "Voucher does not exist");
-
-        Voucher storage voucher = vouchers[tokenId];
-
-        // If we need to reset DCP, return based on the reset amount
-        if (_shouldResetDCP(tokenId)) {
-            return
-                calculateDailyDCP(voucher.tier) >=
-                calculateGymDCPRequirement(gymTier);
-        }
-
-        return voucher.dcpBalance >= calculateGymDCPRequirement(gymTier);
+        uint256 timestamp,
+        uint256 gymId
+    ) external view returns (uint256 count) {
+        uint256 dayStart = _getTodayStartTimestamp(vouchers[tokenId].timezone);
+        return checkInsPerGymPerDay[tokenId][dayStart][gymId];
     }
 
     /**
-     * @dev Returns the remaining DCP balance for a voucher
-     * @param tokenId ID of the voucher
-     * @return balance Current DCP balance
-     */
-    function getDCPBalance(
-        uint256 tokenId
-    ) public view returns (uint256 balance) {
-        require(_exists(tokenId), "Voucher does not exist");
-
-        Voucher storage voucher = vouchers[tokenId];
-
-        // If we need to reset DCP, return the full amount
-        if (_shouldResetDCP(tokenId)) {
-            return calculateDailyDCP(voucher.tier);
-        }
-
-        return voucher.dcpBalance;
-    }
-
-    /**
-     * @dev Returns the check-in history for a voucher
+     * @dev Get all check-in history for a voucher
      * @param tokenId ID of the voucher
      * @return history Array of check-in records
      */
     function getCheckInHistory(
         uint256 tokenId
     ) external view returns (CheckInRecord[] memory) {
-        require(_exists(tokenId), "Voucher does not exist");
         return checkInHistory[tokenId];
     }
 
     /**
-     * @dev Gets the number of check-ins at a specific gym on the current day
+     * @dev Validates if a voucher is still valid (not expired)
      * @param tokenId ID of the voucher
-     * @param gymId ID of the gym
-     * @return count Number of check-ins
+     * @return isValid True if voucher is valid
      */
-    function getTodayCheckInCount(
-        uint256 tokenId,
-        uint256 gymId
-    ) public view returns (uint256 count) {
-        require(_exists(tokenId), "Voucher does not exist");
-        Voucher storage voucher = vouchers[tokenId];
-        uint256 today = _getTodayAsNumber(voucher.timezone);
-        return checkInsPerGymPerDay[tokenId][today][gymId];
+    function validateVoucher(uint256 tokenId) public view returns (bool) {
+        // Check if voucher exists
+        if (!exists(tokenId)) return false;
+
+        // Check if voucher is expired
+        return vouchers[tokenId].expiryDate >= block.timestamp;
     }
 
     /**
-     * @dev Checks if a reset of the daily DCP is needed
-     * @param tokenId ID of the voucher
-     * @return needsReset True if DCP should be reset
-     */
-    function _shouldResetDCP(
-        uint256 tokenId
-    ) internal view returns (bool needsReset) {
-        Voucher storage voucher = vouchers[tokenId];
-        uint256 todayStart = _getTodayStartTimestamp(voucher.timezone);
-        return voucher.lastDcpResetTime < todayStart;
-    }
-
-    /**
-     * @dev Resets the daily DCP allocation
-     * @param tokenId ID of the voucher
-     */
-    function _resetDailyDCP(uint256 tokenId) internal {
-        Voucher storage voucher = vouchers[tokenId];
-        voucher.dcpBalance = calculateDailyDCP(voucher.tier);
-        voucher.lastDcpResetTime = _getTodayStartTimestamp(voucher.timezone);
-        emit DCPReset(tokenId, voucher.dcpBalance);
-    }
-
-    /**
-     * @dev Gets the start timestamp of the current day in the user's timezone
-     * @param timezone User timezone offset (-12 to +14)
+     * @dev Calculate today's start timestamp in a specific timezone
+     * @param timezone User's timezone (-12 to 14)
      * @return timestamp Start of the day in user's timezone
      */
     function _getTodayStartTimestamp(
         int8 timezone
-    ) internal view returns (uint256 timestamp) {
-        // Convert timezone offset to seconds
+    ) internal view returns (uint256) {
+        // Calculate the offset in seconds from UTC
         int256 timezoneOffset = int256(timezone) * 3600;
 
-        // Get current timestamp adjusted for timezone
-        int256 adjustedTimestamp = int256(block.timestamp) + timezoneOffset;
+        // Calculate local time
+        int256 localTime = int256(block.timestamp) + timezoneOffset;
 
-        // Calculate the start of the day in the user's timezone
-        int256 secondsInDay = 86400; // 24 * 60 * 60
-        int256 startOfDay = (adjustedTimestamp / secondsInDay) *
-            secondsInDay -
-            timezoneOffset;
+        // Calculate start of day in local time
+        int256 startOfDayLocal = localTime - (localTime % 86400);
 
-        return startOfDay > 0 ? uint256(startOfDay) : 0;
+        // Convert back to UTC
+        return uint256(startOfDayLocal - timezoneOffset);
     }
 
     /**
-     * @dev Gets a numerical representation of the current day in the user's timezone
-     * @param timezone User timezone offset (-12 to +14)
-     * @return dayNumber Numerical representation of the day (days since epoch)
+     * @dev Check if daily DCP should be reset
+     * @param tokenId ID of the voucher
+     * @return shouldReset True if DCP should be reset
      */
-    function _getTodayAsNumber(
-        int8 timezone
-    ) internal view returns (uint256 dayNumber) {
-        // Convert timezone offset to seconds
-        int256 timezoneOffset = int256(timezone) * 3600;
+    function _shouldResetDCP(uint256 tokenId) internal view returns (bool) {
+        Voucher storage voucher = vouchers[tokenId];
 
-        // Get current timestamp adjusted for timezone
-        int256 adjustedTimestamp = int256(block.timestamp) + timezoneOffset;
+        // Get today's start in user's timezone
+        uint256 todayStart = _getTodayStartTimestamp(voucher.timezone);
 
-        // Calculate the day number
-        return uint256(adjustedTimestamp / 86400);
+        // Check if last reset was before today
+        return voucher.lastDcpResetTime < todayStart;
+    }
+
+    /**
+     * @dev Reset daily DCP balance for a voucher
+     * @param tokenId ID of the voucher
+     */
+    function _resetDailyDCP(uint256 tokenId) internal {
+        Voucher storage voucher = vouchers[tokenId];
+        voucher.dcpBalance = uint128(calculateDailyDCP(voucher.tier));
+        voucher.lastDcpResetTime = uint40(
+            _getTodayStartTimestamp(voucher.timezone)
+        );
+        emit DCPReset(tokenId, voucher.dcpBalance);
+    }
+
+    /**
+     * @dev Calculate daily DCP for a specific tier
+     * @param tier Tier level
+     * @return dcp Daily DCP amount
+     */
+    function calculateDailyDCP(uint8 tier) public pure returns (uint256) {
+        return calculateDCP(tier);
+    }
+
+    /**
+     * @dev Calcula os pontos DCP com verificação de overflow
+     * @param tier O tier para calcular o DCP
+     * @return O valor de DCP para o tier especificado
+     */
+    function calculateDCP(uint8 tier) public pure returns (uint256) {
+        require(tier <= 77, "Tier too high, overflow risk");
+        return 1 << tier; // Bit shift já implementado no código original
+    }
+
+    /**
+     * @dev Verifica se um voucher tem DCP suficiente para uma academia
+     * @param tokenId ID do voucher
+     * @param gymTier Tier da academia
+     * @return hasEnough True se tiver DCP suficiente
+     */
+    function hasSufficientDCP(
+        uint256 tokenId,
+        uint8 gymTier
+    ) public view returns (bool hasEnough) {
+        Voucher storage voucher = vouchers[tokenId];
+        uint128 required = uint128(calculateDCP(gymTier));
+
+        // Se for um novo dia, precisamos considerar o reset de DCP
+        if (_shouldResetDCP(tokenId)) {
+            // Consideramos o valor de DCP que seria após o reset
+            uint128 dailyDCP = uint128(calculateDailyDCP(voucher.tier));
+            return dailyDCP >= required;
+        } else {
+            // Caso contrário, verificamos o saldo atual
+            return voucher.dcpBalance >= required;
+        }
     }
 
     /**
@@ -456,7 +388,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
      * @param tokenId ID of the token
      * @return bool True if the token exists
      */
-    function _exists(uint256 tokenId) internal view returns (bool) {
+    function exists(uint256 tokenId) public view returns (bool) {
         return _ownerOf(tokenId) != address(0);
     }
 
@@ -539,5 +471,14 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
      */
     function getPaymentToken(uint256 tokenId) public view returns (address) {
         return vouchers[tokenId].paymentToken;
+    }
+
+    /**
+     * @dev Retorna o saldo atual de DCP de um voucher
+     * @param tokenId ID do voucher
+     * @return dcpBalance Saldo de DCP do voucher
+     */
+    function getDCPBalance(uint256 tokenId) public view returns (uint256) {
+        return vouchers[tokenId].dcpBalance;
     }
 }

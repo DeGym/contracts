@@ -44,6 +44,9 @@ contract GymManager {
     address public preferredToken;
     uint256 public stakingAmount;
 
+    // Contract owner with admin rights
+    address public owner;
+
     /**
      * @dev Constructor
      * @param _gymNFT Address of the GymNFT contract
@@ -55,6 +58,7 @@ contract GymManager {
         treasury = Treasury(_treasury);
         stakeManager = IStakeManager(_stakeManager);
         stakingAmount = 1000 * 10 ** 18; // Valor padrão
+        owner = msg.sender; // Set deployer as owner
     }
 
     /**
@@ -179,11 +183,32 @@ contract GymManager {
         return result;
     }
 
-    // Temporário: usar o Treasury para validação até termos o StakeManager
+    /**
+     * @dev Define o endereço do contrato StakeManager
+     * @param _stakeManager Endereço do contrato StakeManager
+     */
+    function setStakeManager(address _stakeManager) external {
+        require(_isAuthorized(msg.sender), "Not authorized");
+        stakeManager = IStakeManager(_stakeManager);
+    }
+
+    /**
+     * @dev Checks if an address is authorized for administrative functions
+     * @param addr Address to check
+     * @return True if the address is authorized
+     */
+    function _isAuthorized(address addr) internal view returns (bool) {
+        // For simplicity, only the contract owner is authorized
+        // In a real implementation, this could check against a role system
+        return addr == owner;
+    }
+
+    // Substitua a validação temporária pela integração real com StakeManager
     function validateGymStaking(address staker) internal view returns (bool) {
-        // Implementação temporária que sempre retorna true durante o desenvolvimento
+        if (address(stakeManager) != address(0)) {
+            return stakeManager.validateGymStaking(staker);
+        }
+        // Fallback para desenvolvimento, pode ser removido em produção
         return true;
-        // Ou, se preferir ser mais restritivo:
-        // return msg.sender == owner; // permitir apenas o owner durante desenvolvimento
     }
 }

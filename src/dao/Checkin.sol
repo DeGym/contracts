@@ -37,7 +37,22 @@ contract Checkin is Ownable, ReentrancyGuard {
     constructor(address _voucherNFT, address _gymNFT) Ownable(msg.sender) {
         voucherNFT = VoucherNFT(_voucherNFT);
         gymNFT = GymNFT(_gymNFT);
-        minTimeBetweenCheckins = 5 minutes; // Default minimum time between check-ins
+        minTimeBetweenCheckins = 6 hours; // Atualizado para padrão 6 horas
+    }
+
+    /**
+     * @dev Verifica se um voucher pode fazer check-in
+     * @param voucherId ID do voucher
+     * @return true se o check-in é permitido
+     */
+    function canCheckIn(uint256 voucherId) public view returns (bool) {
+        if (lastCheckinTime[voucherId] == 0) {
+            return true; // Primeiro check-in
+        }
+
+        return
+            block.timestamp >=
+            lastCheckinTime[voucherId] + minTimeBetweenCheckins;
     }
 
     /**

@@ -15,6 +15,13 @@ import "./ITreasury.sol";
 contract Treasury is Ownable, ReentrancyGuard, ITreasury {
     using SafeERC20 for IERC20;
 
+    // Pausabilidade para emergências
+    bool public paused;
+
+    // Eventos para pausabilidade
+    event Paused(address account);
+    event Unpaused(address account);
+
     // Estrutura para parâmetros de preço específicos por token
     struct PriceParams {
         uint256 baseMonthlyPrice; // Preço base mensal para Tier 1
@@ -72,6 +79,38 @@ contract Treasury is Ownable, ReentrancyGuard, ITreasury {
     );
 
     /**
+     * @dev Modificador para funções que só podem ser executadas quando não pausado
+     */
+    modifier whenNotPaused() {
+        require(!paused, "Treasury: paused");
+        _;
+    }
+
+    /**
+     * @dev Modificador para funções que só podem ser executadas quando pausado
+     */
+    modifier whenPaused() {
+        require(paused, "Treasury: not paused");
+        _;
+    }
+
+    /**
+     * @dev Pausa o contrato
+     */
+    function pause() external onlyOwner {
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    /**
+     * @dev Despausa o contrato
+     */
+    function unpause() external onlyOwner {
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    /**
      * @dev Constructor
      */
     constructor() Ownable(msg.sender) {
@@ -110,7 +149,9 @@ contract Treasury is Ownable, ReentrancyGuard, ITreasury {
      * @dev Adds a token to the list of accepted tokens
      * @param tokenAddress Address of the token to be added
      */
-    function addAcceptedToken(address tokenAddress) external onlyOwner {
+    function addAcceptedToken(
+        address tokenAddress
+    ) external override onlyOwner whenNotPaused {
         require(tokenAddress != address(0), "Treasury: invalid token address");
         require(
             !acceptedTokens[tokenAddress],
@@ -262,7 +303,7 @@ contract Treasury is Ownable, ReentrancyGuard, ITreasury {
         address gymOwner,
         address token,
         uint256 amount
-    ) external {
+    ) external override whenNotPaused {
         require(
             msg.sender == address(gymNFT),
             "Treasury: caller is not GymNFT"

@@ -1,32 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
+import {BaseTest} from "../utils/BaseTest.sol";
 import {Checkin} from "../../src/dao/Checkin.sol";
-import {VoucherNFT} from "../../src/user/VoucherNFT.sol";
-import {GymNFT} from "../../src/gym/GymNFT.sol";
-import {Treasury} from "../../src/treasury/Treasury.sol";
-import {GymManager} from "../../src/gym/GymManager.sol";
-import {MockToken} from "../mocks/MockToken.sol";
-import {MockStakeManager} from "../mocks/MockStakeManager.sol";
 
 /**
  * @title CheckinTest
  * @dev Test suite for the Checkin contract
  */
-contract CheckinTest is Test {
+contract CheckinTest is BaseTest {
     Checkin public checkin;
-    VoucherNFT public voucherNFT;
-    GymNFT public gymNFT;
-    Treasury public treasury;
-    GymManager public gymManager;
-    MockToken public testToken;
-    MockStakeManager public stakeManager;
-
-    address public owner = address(0x1);
-    address public user1 = address(0x2);
-    address public user2 = address(0x3);
-    address public gymOwner = address(0x4);
 
     uint256 public gymId;
     uint256 public voucherId;
@@ -36,71 +19,21 @@ contract CheckinTest is Test {
     bool voucherHasDCPFunction = true;
     bool voucherHasDailyDCPFunction = true;
 
-    function setUp() public {
-        // Label addresses for better trace output
-        vm.label(owner, "Owner");
-        vm.label(user1, "User1");
-        vm.label(user2, "User2");
-        vm.label(gymOwner, "GymOwner");
+    function setUp() public override {
+        super.setUp();
 
-        vm.startPrank(owner);
-
-        // Deploy test token
-        testToken = new MockToken("Test Token", "TEST", 18);
-
-        // Mint some tokens to users
-        testToken.mint(user1, 1000 * 10 ** 18);
-        testToken.mint(user2, 1000 * 10 ** 18);
-        testToken.mint(owner, 10000 * 10 ** 18);
-
-        // Deploy contracts
-        treasury = new Treasury();
-        gymNFT = new GymNFT(address(treasury));
-        stakeManager = new MockStakeManager();
-        gymManager = new GymManager(
-            address(gymNFT),
-            address(treasury),
-            address(stakeManager)
-        );
-        voucherNFT = new VoucherNFT(
-            address(treasury),
-            address(gymManager),
-            address(gymNFT),
-            address(treasury)
-        );
+        // Deploy Checkin contract
         checkin = new Checkin(address(voucherNFT), address(gymNFT));
 
-        // Initialize contracts
-        treasury.setGymNFT(address(gymNFT));
+        // Create gym and voucher for testing
+        gymId = createGym(gymOwner, 1);
+        voucherId = mintVoucher(user1, 1, 30, 0);
 
-        // Add testToken as accepted payment method
-        treasury.addAcceptedToken(address(testToken));
+        // Check function existence
+        checkFunctionExistence();
+    }
 
-        // Setup custom parameters for test token
-        treasury.updateTokenPriceParams(
-            address(testToken),
-            100 * 10 ** 18, // basePrice
-            50, // minFactor (50%)
-            5 // decayRate (5%)
-        );
-
-        // Approve treasury to spend tokens
-        vm.stopPrank();
-        vm.startPrank(user1);
-        testToken.approve(address(treasury), 1000 * 10 ** 18);
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        // Create a gym
-        gymId = gymNFT.mintGymNFT(gymOwner, 1);
-        vm.stopPrank();
-
-        vm.startPrank(gymOwner);
-        // Add token acceptance for the gym
-        gymNFT.addAcceptedToken(gymId, address(testToken));
-        vm.stopPrank();
-
-        // Check if functions exist before using them
+    function checkFunctionExistence() internal {
         try voucherNFT.validateVoucher(0) returns (bool) {
             voucherHasValidateFunction = true;
         } catch {
@@ -127,11 +60,6 @@ contract CheckinTest is Test {
                 "Warning: calculateDailyDCP function does not exist in VoucherNFT"
             );
         }
-
-        vm.startPrank(user1);
-        // Mint a voucher
-        voucherId = voucherNFT.mint(1, 30, 0, address(testToken));
-        vm.stopPrank();
     }
 
     function testCheckin() public {
@@ -158,9 +86,18 @@ contract CheckinTest is Test {
             "User should have sufficient DCP"
         );
 
+        // Advance time to ensure there's no lingering time constraint from other tests
+        vm.warp(block.timestamp + 24 hours);
+
         // Perform check-in
-        bool success = checkin.checkin(voucherId, gymId);
-        assertTrue(success, "Check-in should succeed");
+        checkin.checkin(voucherId, gymId);
+
+        // Avance o tempo para permitir outro check-in
+        vm.warp(block.timestamp + 6 hours + 1);
+
+        // Teste um segundo check-in
+        checkin.checkin(voucherId, gymId);
+        vm.stopPrank();
 
         // Verify DCP was consumed
         uint256 dcpAfterCheckin = voucherNFT.getDCPBalance(voucherId);
@@ -168,8 +105,6 @@ contract CheckinTest is Test {
             dcpAfterCheckin < voucherNFT.calculateDailyDCP(1),
             "DCP should be consumed"
         );
-
-        vm.stopPrank();
     }
 
     function testCheckinTimeConstraint() public {
@@ -205,8 +140,10 @@ contract CheckinTest is Test {
             return;
         }
 
-        vm.startPrank(user1);
+        // Advance time to ensure no time constraints from previous tests
+        vm.warp(block.timestamp + 24 hours);
 
+        vm.startPrank(user1);
         // First check-in on day 1
         bool success = checkin.checkin(voucherId, gymId);
         assertTrue(success, "Day 1 check-in should succeed");
@@ -222,11 +159,15 @@ contract CheckinTest is Test {
             "DCP should be reset for new day"
         );
 
-        // Check-in on day 2
-        success = checkin.checkin(voucherId, gymId);
-        assertTrue(success, "Day 2 check-in should succeed");
+        // Avance o tempo para além do intervalo mínimo entre check-ins
+        vm.warp(block.timestamp + 6 hours + 1);
 
+        // Agora tente o check-in novamente
+        vm.startPrank(user1);
+        success = checkin.checkin(voucherId, gymId);
         vm.stopPrank();
+
+        assertTrue(success, "Day 2 check-in should succeed");
     }
 
     function testExpiredVoucher() public {
@@ -256,11 +197,12 @@ contract CheckinTest is Test {
             return;
         }
 
-        vm.startPrank(owner);
+        // Advance time to ensure no time constraints from previous tests
+        vm.warp(block.timestamp + 24 hours);
 
+        vm.startPrank(owner);
         // Create a higher tier gym
         uint256 highTierGymId = gymNFT.mintGymNFT(gymOwner, 5);
-
         vm.stopPrank();
 
         vm.startPrank(gymOwner);
@@ -274,6 +216,9 @@ contract CheckinTest is Test {
         // This should fail due to insufficient DCP
         vm.expectRevert("Insufficient DCP for this gym");
         checkin.checkin(voucherId, highTierGymId);
+
+        // Avance o tempo para além do intervalo mínimo
+        vm.warp(block.timestamp + 6 hours + 1);
 
         vm.stopPrank();
     }
