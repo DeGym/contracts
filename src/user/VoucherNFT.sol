@@ -93,7 +93,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
 
         require(treasury.validateToken(tokenAddress), "Invalid token");
         require(
-            treasury.validateTokenPayment(msg.sender, price),
+            treasury.validateTokenPayment(msg.sender, tokenAddress, price),
             "Payment failed"
         );
 
@@ -121,35 +121,22 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
      * @param voucherId ID of the voucher
      * @param gymId ID of the gym
      */
-    function requestCheckIn(uint256 voucherId, uint256 gymId) external {
-        // Verify caller is the voucher owner
+    function requestCheckIn(uint256 voucherId, uint256 gymId) public {
         require(ownerOf(voucherId) == msg.sender, "Not the voucher owner");
+        require(validateVoucher(voucherId), "Voucher is not valid");
 
-        // Validate voucher
-        require(validateVoucher(voucherId), "Invalid voucher");
+        Voucher memory voucher = vouchers[voucherId];
 
-        // Validate gym
-        require(gymManager.validateGym(gymId), "Invalid gym");
-
-        // Calculate DCP amount for this check-in
         uint256 dcpAmount = calculateCheckInDCP(voucherId);
 
-        // Update voucher DCP balance
-        Voucher storage voucher = vouchers[voucherId];
-        require(voucher.dcpBalance >= dcpAmount, "Insufficient DCP balance");
-        voucher.dcpBalance -= dcpAmount;
+        CheckIn memory newCheckIn = CheckIn({
+            gymId: gymId,
+            timestamp: block.timestamp,
+            dcpAmount: dcpAmount
+        });
 
-        // Transfer DCP to gym
-        gymNFT.receiveDCP(gymId, dcpAmount);
-
-        // Record check-in
-        checkInHistory[voucherId].push(
-            CheckIn({
-                gymId: gymId,
-                timestamp: block.timestamp,
-                dcpAmount: dcpAmount
-            })
-        );
+        checkInHistory[voucherId].push(newCheckIn);
+        vouchers[voucherId].dcpBalance += dcpAmount;
 
         emit CheckInCreated(voucherId, gymId, block.timestamp);
     }
@@ -172,7 +159,11 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
 
             // Validate payment
             require(
-                treasury.validateTokenPayment(ownerOf(voucherId), price),
+                treasury.validateTokenPayment(
+                    ownerOf(voucherId),
+                    voucher.tokenAddress,
+                    price
+                ),
                 "Renewal payment failed"
             );
 
@@ -256,6 +247,18 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
     ) internal pure returns (uint256 dcpAmount) {
         // Simple calculation: tier * duration * base DCP rate
         return tier * duration * 100;
+    }
+
+    /**
+     * @dev Get the last check-in for a voucher
+     * @param voucherId ID of the voucher
+     * @return CheckIn The last check-in record
+     */
+    function getLastCheckIn(
+        uint256 voucherId
+    ) external view returns (CheckIn memory) {
+        require(checkInHistory[voucherId].length > 0, "No check-ins found");
+        return checkInHistory[voucherId][checkInHistory[voucherId].length - 1];
     }
 
     function supportsInterface(

@@ -48,8 +48,8 @@ contract Checkin is Ownable {
      * @param gymId ID of the gym
      * @return success True if check-in is successful
      */
-    function checkin(uint256 voucherId, uint256 gymId) public returns (bool) {
-        // Verificar se o chamador é o dono do voucher
+    function checkin(uint256 voucherId, uint256 gymId) external returns (bool) {
+        // Verificar se o usuário é o proprietário do voucher
         require(
             voucherNFT.ownerOf(voucherId) == msg.sender,
             "Not the voucher owner"

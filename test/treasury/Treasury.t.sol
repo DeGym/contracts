@@ -131,9 +131,6 @@ contract TreasuryTest is Test {
         );
         assertGt(voucherPrice, 0, "Voucher price should be positive");
 
-        uint256 upgradeFee = treasury.calculateUpgradeFee(3, 5);
-        assertGt(upgradeFee, 0, "Upgrade fee should be positive");
-
         vm.stopPrank();
     }
 
@@ -164,32 +161,6 @@ contract TreasuryTest is Test {
         assertTrue(
             treasury.validateToken(address(secondToken)),
             "Second token should now be accepted"
-        );
-
-        vm.stopPrank();
-    }
-
-    function testGetFirstAcceptedToken() public {
-        vm.startPrank(owner);
-
-        // Add a token
-        treasury.addAcceptedToken(address(mockToken));
-
-        // Should return the first accepted token
-        assertEq(
-            treasury.getFirstAcceptedToken(),
-            address(mockToken),
-            "First accepted token should match"
-        );
-
-        // Add another token
-        treasury.addAcceptedToken(address(secondToken));
-
-        // Should still return the first one that was added
-        assertEq(
-            treasury.getFirstAcceptedToken(),
-            address(mockToken),
-            "First accepted token should remain the same"
         );
 
         vm.stopPrank();

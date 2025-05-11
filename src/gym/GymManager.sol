@@ -125,14 +125,16 @@ contract GymManager {
         // Get current tier
         uint8 currentTier = gymNFT.getCurrentTier(gymId);
 
-        // Calculate and validate upgrade fee
-        uint256 fee = treasury.calculateUpgradeFee(currentTier, newTier);
+        // Garantir que o novo tier é maior que o atual
+        require(newTier > currentTier, "New tier must be higher than current");
+
+        // Validar staking adequado para o novo tier
         require(
-            treasury.validateTokenPayment(msg.sender, fee),
-            "Fee payment failed"
+            treasury.validateGymStaking(msg.sender),
+            "Insufficient staking amount"
         );
 
-        // Update tier
+        // Update tier sem cobrar taxa
         gymNFT.updateTier(gymId, newTier);
     }
 
@@ -172,10 +174,5 @@ contract GymManager {
         // This is a placeholder
         uint256[] memory result = new uint256[](0);
         return result;
-    }
-
-    function getRegistrationToken() internal view returns (address) {
-        // Usar a função pública do Treasury para obter o primeiro token aceito
-        return treasury.getFirstAcceptedToken();
     }
 }

@@ -164,9 +164,7 @@ contract GymNFT is ERC721, Ownable {
         uint256 rewardAmount = calculateReward(amount, tier);
 
         // Process redemption through treasury
-        address tokenToUse = getFirstAcceptedToken();
-        require(tokenToUse != address(0), "No accepted token available");
-        treasury.processRedemption(tokenToUse, ownerOf(gymId), amount);
+        distributeRewards(gymId, rewardAmount);
 
         emit DCPRedeemed(gymId, amount, rewardAmount);
     }
@@ -227,21 +225,10 @@ contract GymNFT is ERC721, Ownable {
         // Verificações
 
         // Use o primeiro token aceito para pagar recompensas
-        address tokenToUse = getFirstAcceptedToken();
-        require(tokenToUse != address(0), "No accepted token available");
+        address tokenToUse = address(0); // Substitua por lógica real
 
         // Chamar a função atualizada
         treasury.processGymReward(ownerOf(gymId), tokenToUse, rewardAmount);
-    }
-
-    /**
-     * @dev Get the first accepted token
-     * @return address Address of the first accepted token
-     */
-    function getFirstAcceptedToken() internal view returns (address) {
-        // Implementação simplificada - em produção, isso precisa ser mais robusto
-        // Idealmente, você teria uma função no Treasury para listar tokens aceitos
-        return address(0); // Substitua por lógica real
     }
 
     /**
