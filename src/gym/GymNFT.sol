@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../treasury/Treasury.sol";
+import "../treasury/ITreasury.sol";
 
 /**
  * @title GymNFT
@@ -11,7 +12,7 @@ import "../treasury/Treasury.sol";
  */
 contract GymNFT is ERC721, Ownable {
     // References to other contracts
-    Treasury public treasury;
+    ITreasury public treasury;
 
     // Gym statistics structure
     struct Stats {
@@ -37,6 +38,15 @@ contract GymNFT is ERC721, Ownable {
     // Counter for gym IDs
     uint256 private _nextGymId = 1;
 
+    // Adicionando uma nova estrutura para gerenciar tokens aceitos por academia
+    struct AcceptedTokens {
+        address[] tokens;
+        address preferredToken;
+    }
+
+    // Mapeamento de academias para seus tokens aceitos
+    mapping(uint256 => AcceptedTokens) private gymAcceptedTokens;
+
     // Events
     event GymNFTCreated(
         uint256 indexed gymId,
@@ -54,6 +64,8 @@ contract GymNFT is ERC721, Ownable {
         uint256 amount,
         uint256 rewardAmount
     );
+    event TokenAccepted(uint256 indexed gymId, address indexed token);
+    event PreferredTokenSet(uint256 indexed gymId, address indexed token);
 
     /**
      * @dev Constructor
@@ -62,7 +74,7 @@ contract GymNFT is ERC721, Ownable {
     constructor(
         address _treasury
     ) ERC721("DeGym Fitness Center", "GYM") Ownable(msg.sender) {
-        treasury = Treasury(_treasury);
+        treasury = ITreasury(_treasury);
     }
 
     /**
@@ -136,7 +148,7 @@ contract GymNFT is ERC721, Ownable {
         stats.lastActivityTime = block.timestamp;
 
         // Process reward through treasury
-        distributeRewards(gymId, rewardAmount);
+        distributeRewards(gymId, rewardAmount, address(0));
 
         emit DCPReceived(gymId, amount, rewardAmount);
     }
@@ -164,7 +176,7 @@ contract GymNFT is ERC721, Ownable {
         uint256 rewardAmount = calculateReward(amount, tier);
 
         // Process redemption through treasury
-        distributeRewards(gymId, rewardAmount);
+        distributeRewards(gymId, rewardAmount, address(0));
 
         emit DCPRedeemed(gymId, amount, rewardAmount);
     }
@@ -220,15 +232,139 @@ contract GymNFT is ERC721, Ownable {
      * @dev Distribute rewards to the gym
      * @param gymId ID of the gym
      * @param rewardAmount Amount of rewards to distribute
+     * @param tokenToUse Endereço do token a ser usado (opcional, 0x0 para usar preferencial)
      */
-    function distributeRewards(uint256 gymId, uint256 rewardAmount) public {
-        // Verificações
+    function distributeRewards(
+        uint256 gymId,
+        uint256 rewardAmount,
+        address tokenToUse
+    ) public {
+        // Verificar se o token foi especificado, senão usar o preferencial
+        if (tokenToUse == address(0)) {
+            tokenToUse = getPreferredToken(gymId);
+            // Se ainda for zero, tentar obter qualquer token aceito
+            if (tokenToUse == address(0)) {
+                tokenToUse = getFirstAcceptedToken(gymId);
+            }
+        }
 
-        // Use o primeiro token aceito para pagar recompensas
-        address tokenToUse = address(0); // Substitua por lógica real
+        // Verificar se o token é aceito pela academia
+        require(
+            isTokenAccepted(gymId, tokenToUse),
+            "Token not accepted by gym"
+        );
+
+        // Verificar se o token é aceito pelo treasury
+        require(
+            treasury.isTokenAccepted(tokenToUse),
+            "Token not accepted by treasury"
+        );
 
         // Chamar a função atualizada
         treasury.processGymReward(ownerOf(gymId), tokenToUse, rewardAmount);
+    }
+
+    /**
+     * @dev Adicionar um token aceito para uma academia
+     * @param gymId ID da academia
+     * @param token Endereço do token
+     */
+    function addAcceptedToken(uint256 gymId, address token) public {
+        require(
+            ownerOf(gymId) == msg.sender || msg.sender == owner(),
+            "Not authorized"
+        );
+        require(token != address(0), "Invalid token address");
+        require(!isTokenAccepted(gymId, token), "Token already accepted");
+
+        // Verificar se o token é aceito pelo treasury
+        require(
+            treasury.isTokenAccepted(token),
+            "Token not accepted by treasury"
+        );
+
+        gymAcceptedTokens[gymId].tokens.push(token);
+
+        // Se for o primeiro token, definir como preferencial
+        if (
+            gymAcceptedTokens[gymId].tokens.length == 1 &&
+            gymAcceptedTokens[gymId].preferredToken == address(0)
+        ) {
+            gymAcceptedTokens[gymId].preferredToken = token;
+            emit PreferredTokenSet(gymId, token);
+        }
+
+        emit TokenAccepted(gymId, token);
+    }
+
+    /**
+     * @dev Definir o token preferencial para uma academia
+     * @param gymId ID da academia
+     * @param token Endereço do token
+     */
+    function setPreferredToken(uint256 gymId, address token) public {
+        require(ownerOf(gymId) == msg.sender, "Not the gym owner");
+        require(
+            isTokenAccepted(gymId, token),
+            "Token not accepted by this gym"
+        );
+
+        gymAcceptedTokens[gymId].preferredToken = token;
+        emit PreferredTokenSet(gymId, token);
+    }
+
+    /**
+     * @dev Verificar se um token é aceito por uma academia
+     * @param gymId ID da academia
+     * @param token Endereço do token
+     * @return bool Verdadeiro se o token for aceito
+     */
+    function isTokenAccepted(
+        uint256 gymId,
+        address token
+    ) public view returns (bool) {
+        address[] memory tokens = gymAcceptedTokens[gymId].tokens;
+        for (uint i = 0; i < tokens.length; i++) {
+            if (tokens[i] == token) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @dev Obter o token preferencial de uma academia
+     * @param gymId ID da academia
+     * @return address Endereço do token preferencial
+     */
+    function getPreferredToken(uint256 gymId) public view returns (address) {
+        return gymAcceptedTokens[gymId].preferredToken;
+    }
+
+    /**
+     * @dev Obter o primeiro token aceito por uma academia
+     * @param gymId ID da academia
+     * @return address Endereço do primeiro token aceito
+     */
+    function getFirstAcceptedToken(
+        uint256 gymId
+    ) public view returns (address) {
+        address[] memory tokens = gymAcceptedTokens[gymId].tokens;
+        if (tokens.length > 0) {
+            return tokens[0];
+        }
+        return address(0);
+    }
+
+    /**
+     * @dev Obter todos os tokens aceitos por uma academia
+     * @param gymId ID da academia
+     * @return tokens Array de endereços de tokens aceitos
+     */
+    function getAcceptedTokens(
+        uint256 gymId
+    ) public view returns (address[] memory) {
+        return gymAcceptedTokens[gymId].tokens;
     }
 
     /**

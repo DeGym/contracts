@@ -6,6 +6,7 @@ import "../../src/gym/GymManager.sol";
 import "../../src/gym/GymNFT.sol";
 import "../../src/treasury/Treasury.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../mocks/MockStakeManager.sol";
 
 // Mock token for testing
 contract MockToken is ERC20 {
@@ -20,6 +21,7 @@ contract GymManagerTest is Test {
     GymNFT public gymNFT;
     Treasury public treasury;
     MockToken public USDT;
+    MockStakeManager public stakeManager;
 
     // Test addresses
     address public owner = address(0x123);
@@ -33,7 +35,12 @@ contract GymManagerTest is Test {
         USDT = new MockToken();
         treasury = new Treasury();
         gymNFT = new GymNFT(address(treasury));
-        gymManager = new GymManager(address(gymNFT), address(treasury));
+        stakeManager = new MockStakeManager();
+        gymManager = new GymManager(
+            address(gymNFT),
+            address(treasury),
+            address(stakeManager)
+        );
 
         // Setup permissions
         gymNFT.transferOwnership(address(gymManager));
@@ -42,7 +49,12 @@ contract GymManagerTest is Test {
         treasury.addAcceptedToken(address(USDT));
 
         // Set voucher price for USDT and gym registration fee
-        treasury.setVoucherPrice(address(USDT), 10 * 10 ** 18); // 10 USDT preço base
+        treasury.updateTokenPriceParams(
+            address(USDT),
+            10 * 10 ** 18, // preço base
+            50, // minFactor (50%)
+            5 // decayRate (5%)
+        );
 
         // Transfer tokens to gym owner
         USDT.transfer(gymOwner, 10000 * 10 ** 18);

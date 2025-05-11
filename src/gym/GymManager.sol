@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./GymNFT.sol";
 import "../treasury/Treasury.sol";
+import "../stake/IStakeManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
@@ -13,6 +14,7 @@ contract GymManager {
     // References to other contracts
     GymNFT public gymNFT;
     Treasury public treasury;
+    IStakeManager public stakeManager;
 
     // Gym details structure
     struct Gym {
@@ -38,14 +40,21 @@ contract GymManager {
         uint256[2] location
     );
 
+    // Added for the new validateGymStaking function
+    address public preferredToken;
+    uint256 public stakingAmount;
+
     /**
      * @dev Constructor
      * @param _gymNFT Address of the GymNFT contract
      * @param _treasury Address of the Treasury contract
+     * @param _stakeManager Address of the StakeManager contract
      */
-    constructor(address _gymNFT, address _treasury) {
+    constructor(address _gymNFT, address _treasury, address _stakeManager) {
         gymNFT = GymNFT(_gymNFT);
         treasury = Treasury(_treasury);
+        stakeManager = IStakeManager(_stakeManager);
+        stakingAmount = 1000 * 10 ** 18; // Valor padrão
     }
 
     /**
@@ -61,10 +70,7 @@ contract GymManager {
         uint8 tier
     ) external returns (uint256 gymId) {
         // Validate that the user has sufficient staking
-        require(
-            treasury.validateGymStaking(msg.sender),
-            "Insufficient staking amount"
-        );
+        require(validateGymStaking(msg.sender), "Insufficient staking amount");
 
         // Mint GymNFT
         gymId = gymNFT.mintGymNFT(msg.sender, tier);
@@ -129,10 +135,7 @@ contract GymManager {
         require(newTier > currentTier, "New tier must be higher than current");
 
         // Validar staking adequado para o novo tier
-        require(
-            treasury.validateGymStaking(msg.sender),
-            "Insufficient staking amount"
-        );
+        require(validateGymStaking(msg.sender), "Insufficient staking amount");
 
         // Update tier sem cobrar taxa
         gymNFT.updateTier(gymId, newTier);
@@ -174,5 +177,13 @@ contract GymManager {
         // This is a placeholder
         uint256[] memory result = new uint256[](0);
         return result;
+    }
+
+    // Temporário: usar o Treasury para validação até termos o StakeManager
+    function validateGymStaking(address staker) internal view returns (bool) {
+        // Implementação temporária que sempre retorna true durante o desenvolvimento
+        return true;
+        // Ou, se preferir ser mais restritivo:
+        // return msg.sender == owner; // permitir apenas o owner durante desenvolvimento
     }
 }

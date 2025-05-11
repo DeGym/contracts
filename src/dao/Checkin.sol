@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../user/VoucherNFT.sol";
 import "../gym/GymNFT.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title Checkin
- * @dev Manages check-in validation and processing
+ * @dev Manages user check-ins to gyms
  */
-contract Checkin is Ownable {
+contract Checkin is Ownable, ReentrancyGuard {
     // References to other contracts
     VoucherNFT public voucherNFT;
     GymNFT public gymNFT;
 
-    // Mapeamento para armazenar o último tempo de check-in por voucher
+    // Mapping from voucher ID to timestamp of last check-in
     mapping(uint256 => uint256) public lastCheckinTime;
 
-    // Mapeamento para rastrear DCP diário usado por voucher (resetado diariamente)
-    mapping(uint256 => mapping(uint256 => uint256)) private dailyDCPUsed; // voucherId => day => amount
+    // Minimum time between check-ins (in seconds)
+    uint256 public minTimeBetweenCheckins;
 
     // Events
     event CheckinCompleted(
@@ -26,11 +27,7 @@ contract Checkin is Ownable {
         uint256 indexed gymId,
         uint256 timestamp
     );
-    event CheckinRejected(
-        uint256 indexed voucherId,
-        uint256 indexed gymId,
-        string reason
-    );
+    event MinTimeBetweenCheckinsUpdated(uint256 oldValue, uint256 newValue);
 
     /**
      * @dev Constructor
@@ -40,76 +37,102 @@ contract Checkin is Ownable {
     constructor(address _voucherNFT, address _gymNFT) Ownable(msg.sender) {
         voucherNFT = VoucherNFT(_voucherNFT);
         gymNFT = GymNFT(_gymNFT);
+        minTimeBetweenCheckins = 5 minutes; // Default minimum time between check-ins
     }
 
     /**
-     * @dev Process a check-in
-     * @param voucherId ID of the voucher
-     * @param gymId ID of the gym
-     * @return success True if check-in is successful
+     * @dev Updates the minimum time required between check-ins
+     * @param _minTime New minimum time in seconds
      */
-    function checkin(uint256 voucherId, uint256 gymId) external returns (bool) {
-        // Verificar se o usuário é o proprietário do voucher
+    function setMinTimeBetweenCheckins(uint256 _minTime) external onlyOwner {
+        uint256 oldValue = minTimeBetweenCheckins;
+        minTimeBetweenCheckins = _minTime;
+        emit MinTimeBetweenCheckinsUpdated(oldValue, _minTime);
+    }
+
+    /**
+     * @dev Processes a check-in request
+     * @param voucherId ID of the user's voucher
+     * @param gymId ID of the gym
+     * @return success True if check-in was successful
+     */
+    function checkin(
+        uint256 voucherId,
+        uint256 gymId
+    ) external nonReentrant returns (bool success) {
+        // Verify the caller is the owner of the voucher
         require(
             voucherNFT.ownerOf(voucherId) == msg.sender,
             "Not the voucher owner"
         );
 
-        // Verificar se o voucher é válido
-        require(voucherNFT.validateVoucher(voucherId), "Voucher is not valid");
+        // Validate the voucher
+        require(
+            voucherNFT.validateVoucher(voucherId),
+            "Invalid or expired voucher"
+        );
 
-        // Verificar se a academia existe
-        require(gymNFT.ownerOf(gymId) != address(0), "Gym does not exist");
+        // Check time constraints
+        require(
+            block.timestamp >=
+                lastCheckinTime[voucherId] + minTimeBetweenCheckins,
+            "Must wait minimum time between check-ins"
+        );
 
-        // Atualizar timestamp do último check-in
+        // Get gym tier
+        uint8 gymTier = gymNFT.getCurrentTier(gymId);
+
+        // Check if user has enough DCP for this gym
+        require(
+            voucherNFT.hasSufficientDCP(voucherId, gymTier),
+            "Insufficient DCP for this gym"
+        );
+
+        // Check if user has not reached daily limit for this gym
+        // This is now handled inside the VoucherNFT contract
+
+        // Update last check-in time
         lastCheckinTime[voucherId] = block.timestamp;
 
-        // Processar o check-in
-        voucherNFT.requestCheckIn(voucherId, gymId);
+        // Request check-in in VoucherNFT (this will handle DCP deduction and check-in record)
+        require(
+            voucherNFT.requestCheckIn(voucherId, gymId),
+            "Check-in processing failed"
+        );
 
         emit CheckinCompleted(voucherId, gymId, block.timestamp);
-
         return true;
     }
 
     /**
-     * @dev Check if a user can check in
-     * @param voucherId ID of the voucher
-     * @return canCheckIn True if the user can check in
-     * @return timeRemaining Time remaining until next check-in is allowed
+     * @dev Checks if a voucher is eligible for check-in
+     * @param voucherId ID of the user's voucher
+     * @return canCheckIn True if the voucher is eligible for check-in
+     * @return timeRemaining Time remaining until eligible if not currently eligible
      */
     function checkEligibility(
         uint256 voucherId
     ) public view returns (bool canCheckIn, uint256 timeRemaining) {
-        // Verificar se o chamador é o dono do voucher
-        if (voucherNFT.ownerOf(voucherId) != msg.sender) {
+        // Verify the caller is the owner of the voucher
+        require(
+            voucherNFT.ownerOf(voucherId) == msg.sender,
+            "Not the voucher owner"
+        );
+
+        // Validate the voucher
+        bool isValid = voucherNFT.validateVoucher(voucherId);
+        if (!isValid) {
             return (false, 0);
         }
 
-        // Verificar se o voucher é válido
-        if (!voucherNFT.validateVoucher(voucherId)) {
-            return (false, 0);
+        // Check time constraints
+        uint256 nextEligibleTime = lastCheckinTime[voucherId] +
+            minTimeBetweenCheckins;
+        if (block.timestamp < nextEligibleTime) {
+            return (false, nextEligibleTime - block.timestamp);
         }
 
-        // Sempre pode fazer check-in se o voucher for válido e pertencer ao usuário
+        // If we got here, the voucher is eligible for check-in
         return (true, 0);
-    }
-
-    /**
-     * @dev Update VoucherNFT contract address (only owner)
-     * @param _newVoucherNFT Address of the new VoucherNFT contract
-     */
-    function setVoucherNFT(address _newVoucherNFT) external onlyOwner {
-        require(_newVoucherNFT != address(0), "Invalid address");
-        voucherNFT = VoucherNFT(_newVoucherNFT);
-    }
-
-    /**
-     * @dev Update GymNFT contract address (only owner)
-     * @param _newGymNFT Address of the new GymNFT contract
-     */
-    function setGymNFT(address _newGymNFT) external onlyOwner {
-        require(_newGymNFT != address(0), "Invalid address");
-        gymNFT = GymNFT(_newGymNFT);
     }
 }
