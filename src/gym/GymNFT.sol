@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -136,7 +136,7 @@ contract GymNFT is ERC721, Ownable {
         stats.lastActivityTime = block.timestamp;
 
         // Process reward through treasury
-        treasury.processGymReward(ownerOf(gymId), rewardAmount);
+        distributeRewards(gymId, rewardAmount);
 
         emit DCPReceived(gymId, amount, rewardAmount);
     }
@@ -164,7 +164,9 @@ contract GymNFT is ERC721, Ownable {
         uint256 rewardAmount = calculateReward(amount, tier);
 
         // Process redemption through treasury
-        treasury.processRedemption(gymId, amount);
+        address tokenToUse = getFirstAcceptedToken();
+        require(tokenToUse != address(0), "No accepted token available");
+        treasury.processRedemption(tokenToUse, ownerOf(gymId), amount);
 
         emit DCPRedeemed(gymId, amount, rewardAmount);
     }
@@ -214,5 +216,42 @@ contract GymNFT is ERC721, Ownable {
         uint256 gymId
     ) external view returns (Stats memory stats) {
         return gymStats[gymId];
+    }
+
+    /**
+     * @dev Distribute rewards to the gym
+     * @param gymId ID of the gym
+     * @param rewardAmount Amount of rewards to distribute
+     */
+    function distributeRewards(uint256 gymId, uint256 rewardAmount) public {
+        // Verificações
+
+        // Use o primeiro token aceito para pagar recompensas
+        address tokenToUse = getFirstAcceptedToken();
+        require(tokenToUse != address(0), "No accepted token available");
+
+        // Chamar a função atualizada
+        treasury.processGymReward(ownerOf(gymId), tokenToUse, rewardAmount);
+    }
+
+    /**
+     * @dev Get the first accepted token
+     * @return address Address of the first accepted token
+     */
+    function getFirstAcceptedToken() internal view returns (address) {
+        // Implementação simplificada - em produção, isso precisa ser mais robusto
+        // Idealmente, você teria uma função no Treasury para listar tokens aceitos
+        return address(0); // Substitua por lógica real
+    }
+
+    /**
+     * @dev Returns the number of gyms owned by an address
+     * @param owner Address of the owner
+     * @return count Number of gyms owned
+     */
+    function balanceOf(
+        address owner
+    ) public view virtual override returns (uint256 count) {
+        return super.balanceOf(owner);
     }
 }

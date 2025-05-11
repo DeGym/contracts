@@ -8,6 +8,7 @@ cache_path = "cache"
 cache_base_path = "cache"
 block_base_fee_per_gas = 1000000000
 evm_version = "cancun"
+remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]
 
 [rpc_endpoints]
 taraxa_mainnet = "${TARAXA_MAINNET_RPC_URL}"

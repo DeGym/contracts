@@ -19,20 +19,19 @@ contract GymManagerTest is Test {
     GymManager public gymManager;
     GymNFT public gymNFT;
     Treasury public treasury;
-    MockToken public mockToken;
+    MockToken public USDT;
 
     // Test addresses
     address public owner = address(0x123);
     address public gymOwner = address(0x456);
     address public user = address(0x789);
-    address public treasuryWallet = address(0xabc);
 
     function setUp() public {
         vm.startPrank(owner);
 
         // Deploy contracts
-        mockToken = new MockToken();
-        treasury = new Treasury(treasuryWallet);
+        USDT = new MockToken();
+        treasury = new Treasury();
         gymNFT = new GymNFT(address(treasury));
         gymManager = new GymManager(address(gymNFT), address(treasury));
 
@@ -40,10 +39,13 @@ contract GymManagerTest is Test {
         gymNFT.transferOwnership(address(gymManager));
 
         // Add tokens to treasury
-        treasury.addAcceptedToken(address(mockToken));
+        treasury.addAcceptedToken(address(USDT));
+
+        // Set voucher price for USDT and gym registration fee
+        treasury.setVoucherPrice(address(USDT), 10 * 10 ** 18); // 10 USDT preço base
 
         // Transfer tokens to gym owner
-        mockToken.transfer(gymOwner, 10000 * 10 ** 18);
+        USDT.transfer(gymOwner, 10000 * 10 ** 18);
 
         vm.stopPrank();
     }
@@ -51,26 +53,27 @@ contract GymManagerTest is Test {
     function testRegisterGym() public {
         vm.startPrank(gymOwner);
 
-        mockToken.approve(address(treasury), 1000 * 10 ** 18);
+        USDT.approve(address(treasury), 1000 * 10 ** 18);
 
         uint256[2] memory location = [uint256(40000000), uint256(74000000)]; // NYC coords
-        uint256 gymId = gymManager.registerGym("New York Fitness", location, 3);
+        uint256 gymId = gymManager.registerGym("Test Gym", location, 5);
 
-        // Verify gym is registered
-        assertTrue(gymId > 0, "Gym ID should be positive");
-
-        // Verify gym ownership
-        assertEq(gymNFT.ownerOf(gymId), gymOwner);
+        assertGt(gymId, 0, "Gym ID should be greater than 0");
+        assertEq(
+            gymNFT.ownerOf(gymId),
+            gymOwner,
+            "Gym owner should be set correctly"
+        );
 
         vm.stopPrank();
     }
 
     function testUpdateGymInfo() public {
         vm.startPrank(gymOwner);
-        mockToken.approve(address(treasury), 1000 * 10 ** 18);
+        USDT.approve(address(treasury), 1000 * 10 ** 18);
 
         uint256[2] memory location = [uint256(40000000), uint256(74000000)];
-        uint256 gymId = gymManager.registerGym("New York Fitness", location, 3);
+        uint256 gymId = gymManager.registerGym("Test Gym", location, 5);
 
         // Now update gym info
         uint256[2] memory newLocation = [uint256(40000100), uint256(74000100)];
@@ -87,10 +90,10 @@ contract GymManagerTest is Test {
     function testNonOwnerCannotUpdateGym() public {
         // First register a gym
         vm.startPrank(gymOwner);
-        mockToken.approve(address(treasury), 1000 * 10 ** 18);
+        USDT.approve(address(treasury), 1000 * 10 ** 18);
 
         uint256[2] memory location = [uint256(40000000), uint256(74000000)];
-        uint256 gymId = gymManager.registerGym("New York Fitness", location, 3);
+        uint256 gymId = gymManager.registerGym("Test Gym", location, 5);
         vm.stopPrank();
 
         // Try to update as non-owner
@@ -110,29 +113,29 @@ contract GymManagerTest is Test {
 
     function testTierUpgrade() public {
         vm.startPrank(gymOwner);
-        mockToken.approve(address(treasury), 1000 * 10 ** 18);
+        USDT.approve(address(treasury), 1000 * 10 ** 18);
 
         uint256[2] memory location = [uint256(40000000), uint256(74000000)];
-        uint256 gymId = gymManager.registerGym("New York Fitness", location, 3);
+        uint256 gymId = gymManager.registerGym("Test Gym", location, 5);
 
-        // Tier should be 3
-        assertEq(gymNFT.getCurrentTier(gymId), 3);
+        // Tier should be 5
+        assertEq(gymNFT.getCurrentTier(gymId), 5);
 
         // Request tier upgrade
-        gymManager.requestTierUpdate(gymId, 5);
+        gymManager.requestTierUpdate(gymId, 7);
 
-        // Tier should now be 5
-        assertEq(gymNFT.getCurrentTier(gymId), 5);
+        // Tier should now be 7
+        assertEq(gymNFT.getCurrentTier(gymId), 7);
 
         vm.stopPrank();
     }
 
     function testValidateGym() public {
         vm.startPrank(gymOwner);
-        mockToken.approve(address(treasury), 1000 * 10 ** 18);
+        USDT.approve(address(treasury), 1000 * 10 ** 18);
 
         uint256[2] memory location = [uint256(40000000), uint256(74000000)];
-        uint256 gymId = gymManager.registerGym("New York Fitness", location, 3);
+        uint256 gymId = gymManager.registerGym("Test Gym", location, 5);
         vm.stopPrank();
 
         // Validate gym

@@ -21,7 +21,6 @@ contract TreasuryTest is Test {
     // Test addresses
     address public owner = address(0x123);
     address public user = address(0x456);
-    address public treasuryWallet = address(0x789);
 
     function setUp() public {
         vm.startPrank(owner);
@@ -29,7 +28,7 @@ contract TreasuryTest is Test {
         // Deploy contracts
         mockToken = new MockToken();
         secondToken = new MockToken();
-        treasury = new Treasury(treasuryWallet);
+        treasury = new Treasury();
 
         // Transfer tokens to user
         mockToken.transfer(user, 1000 * 10 ** 18);
@@ -76,23 +75,41 @@ contract TreasuryTest is Test {
         treasury.removeAcceptedToken(address(mockToken));
     }
 
-    function testSetPrices() public {
+    function testSetVoucherPrice() public {
         vm.startPrank(owner);
 
-        // Check initial prices
-        assertEq(treasury.voucherBasePriceUSD(), 10 * 10 ** 18);
-        assertEq(treasury.gymRegistrationBaseFeeUSD(), 100 * 10 ** 18);
-        assertEq(treasury.tierUpgradeBaseFeeUSD(), 50 * 10 ** 18);
+        // Add token to accepted tokens
+        treasury.addAcceptedToken(address(mockToken));
 
-        // Update prices
-        treasury.setVoucherBasePrice(20 * 10 ** 18);
-        treasury.setGymRegistrationBaseFee(200 * 10 ** 18);
-        treasury.setTierUpgradeBaseFee(75 * 10 ** 18);
+        // Set voucher price for token
+        uint256 price = 10 * 10 ** 18;
+        treasury.setVoucherPrice(address(mockToken), price);
 
-        // Verify updated prices
-        assertEq(treasury.voucherBasePriceUSD(), 20 * 10 ** 18);
-        assertEq(treasury.gymRegistrationBaseFeeUSD(), 200 * 10 ** 18);
-        assertEq(treasury.tierUpgradeBaseFeeUSD(), 75 * 10 ** 18);
+        // Verify updated price
+        assertEq(treasury.voucherPrices(address(mockToken)), price);
+
+        // Change price
+        uint256 newPrice = 20 * 10 ** 18;
+        treasury.setVoucherPrice(address(mockToken), newPrice);
+
+        // Verify new price
+        assertEq(treasury.voucherPrices(address(mockToken)), newPrice);
+
+        vm.stopPrank();
+    }
+
+    function testSetMinimumGymStakingAmount() public {
+        vm.startPrank(owner);
+
+        // Check initial value
+        uint256 initialAmount = treasury.minimumGymStakingAmount();
+
+        // Update minimum staking amount
+        uint256 newAmount = 2000 * 10 ** 18;
+        treasury.setMinimumGymStakingAmount(newAmount);
+
+        // Verify updated amount
+        assertEq(treasury.minimumGymStakingAmount(), newAmount);
 
         vm.stopPrank();
     }
@@ -103,7 +120,10 @@ contract TreasuryTest is Test {
         // Add token to accepted tokens
         treasury.addAcceptedToken(address(mockToken));
 
-        // Default price calculations
+        // Set token price
+        treasury.setVoucherPrice(address(mockToken), 10 * 10 ** 18);
+
+        // Test price calculations
         uint256 voucherPrice = treasury.calculatePrice(
             address(mockToken),
             10,
@@ -149,16 +169,28 @@ contract TreasuryTest is Test {
         vm.stopPrank();
     }
 
-    function testChangeTreasuryWallet() public {
+    function testGetFirstAcceptedToken() public {
         vm.startPrank(owner);
 
-        address newWallet = address(0xabc);
+        // Add a token
+        treasury.addAcceptedToken(address(mockToken));
 
-        // Change treasury wallet
-        treasury.setTreasuryWallet(newWallet);
+        // Should return the first accepted token
+        assertEq(
+            treasury.getFirstAcceptedToken(),
+            address(mockToken),
+            "First accepted token should match"
+        );
 
-        // Verify change
-        assertEq(treasury.treasuryWallet(), newWallet);
+        // Add another token
+        treasury.addAcceptedToken(address(secondToken));
+
+        // Should still return the first one that was added
+        assertEq(
+            treasury.getFirstAcceptedToken(),
+            address(mockToken),
+            "First accepted token should remain the same"
+        );
 
         vm.stopPrank();
     }

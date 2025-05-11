@@ -30,7 +30,6 @@ contract CheckinTest is Test {
     address public gymOwner = address(0x456);
     address public user1 = address(0x789);
     address public user2 = address(0xabc);
-    address public treasuryWallet = address(0xdef);
 
     // Test data
     uint256 public gymId;
@@ -41,7 +40,7 @@ contract CheckinTest is Test {
 
         // Deploy contracts
         USDT = new MockToken();
-        treasury = new Treasury(treasuryWallet);
+        treasury = new Treasury();
         gymNFT = new GymNFT(address(treasury));
         gymManager = new GymManager(address(gymNFT), address(treasury));
         voucherNFT = new VoucherNFT(
@@ -57,7 +56,10 @@ contract CheckinTest is Test {
         // Add tokens to treasury
         treasury.addAcceptedToken(address(USDT));
 
-        // Transfer tokens to users first
+        // Set voucher price for USDT
+        treasury.setVoucherPrice(address(USDT), 10 * 10 ** 18);
+
+        // Transfer tokens to users
         USDT.transfer(gymOwner, 10000 * 10 ** 18);
         USDT.transfer(user1, 1000 * 10 ** 18);
         vm.stopPrank();

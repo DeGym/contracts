@@ -1,96 +1,104 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "../gym/GymNFT.sol";
 
 /**
  * @title Treasury
- * @dev Manages funds and pricing for the DeGym ecosystem
+ * @dev Manages tokens and fees for the DeGym platform
  */
-contract Treasury is Ownable {
-    // Mapping of accepted tokens
+contract Treasury is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    // Accepted tokens for payment
     mapping(address => bool) public acceptedTokens;
 
-    // Base prices for various services
-    uint256 public voucherBasePriceUSD;
-    uint256 public gymRegistrationBaseFeeUSD;
-    uint256 public tierUpgradeBaseFeeUSD;
+    // Voucher prices per accepted token
+    mapping(address => uint256) public voucherPrices;
 
-    // Treasury address to receive payments
-    address public treasuryWallet;
+    // Minimum staking amount required for gym registration
+    uint256 public minimumGymStakingAmount;
+
+    // Reference to GymNFT contract
+    GymNFT public gymNFT;
 
     // Events
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
-    event PriceUpdated(string priceType, uint256 newPrice);
-    event PaymentReceived(
-        address indexed from,
-        address indexed token,
-        uint256 amount
-    );
-    event PaymentSent(
-        address indexed to,
-        address indexed token,
-        uint256 amount
-    );
+    event VoucherPriceUpdated(address indexed token, uint256 price);
+    event MinimumStakingUpdated(uint256 newAmount);
+    event PaymentReceived(address indexed token, uint256 amount, address from);
+    event PaymentSent(address indexed token, uint256 amount, address to);
+    event Withdrawal(address indexed token, uint256 amount, address to);
 
     /**
      * @dev Constructor
-     * @param _treasuryWallet Address of the treasury wallet
      */
-    constructor(address _treasuryWallet) Ownable(msg.sender) {
-        treasuryWallet = _treasuryWallet;
-
-        // Set initial prices
-        voucherBasePriceUSD = 10 * 10 ** 18; // $10 with 18 decimals
-        gymRegistrationBaseFeeUSD = 100 * 10 ** 18; // $100 with 18 decimals
-        tierUpgradeBaseFeeUSD = 50 * 10 ** 18; // $50 with 18 decimals
+    constructor() Ownable(msg.sender) {
+        minimumGymStakingAmount = 1000 * 10 ** 18; // Default 1000 tokens needed for gym registration
     }
 
     /**
-     * @dev Add a token to the accepted tokens list
-     * @param token Address of the token
+     * @dev Sets the minimum staking amount required for gym registration
+     * @param _amount New minimum amount
      */
-    function addAcceptedToken(address token) external onlyOwner {
-        acceptedTokens[token] = true;
-        emit TokenAdded(token);
+    function setMinimumGymStakingAmount(uint256 _amount) external onlyOwner {
+        require(_amount > 0, "Treasury: amount must be greater than zero");
+        minimumGymStakingAmount = _amount;
+        emit MinimumStakingUpdated(_amount);
     }
 
     /**
-     * @dev Remove a token from the accepted tokens list
-     * @param token Address of the token
+     * @dev Adds a token to the list of accepted tokens
+     * @param tokenAddress Address of the token to be added
      */
-    function removeAcceptedToken(address token) external onlyOwner {
-        acceptedTokens[token] = false;
-        emit TokenRemoved(token);
+    function addAcceptedToken(address tokenAddress) external onlyOwner {
+        require(tokenAddress != address(0), "Treasury: invalid token address");
+        require(
+            !acceptedTokens[tokenAddress],
+            "Treasury: token already accepted"
+        );
+
+        acceptedTokens[tokenAddress] = true;
+        emit TokenAdded(tokenAddress);
     }
 
     /**
-     * @dev Update base prices
-     * @param _voucherPrice New voucher base price
-     * @param _gymRegistrationFee New gym registration fee
-     * @param _tierUpgradeFee New tier upgrade fee
+     * @dev Removes a token from the list of accepted tokens
+     * @param tokenAddress Address of the token to be removed
      */
-    function updatePrices(
-        uint256 _voucherPrice,
-        uint256 _gymRegistrationFee,
-        uint256 _tierUpgradeFee
+    function removeAcceptedToken(address tokenAddress) external onlyOwner {
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+
+        acceptedTokens[tokenAddress] = false;
+        emit TokenRemoved(tokenAddress);
+    }
+
+    /**
+     * @dev Sets the voucher price for a specific token
+     * @param tokenAddress Address of the token
+     * @param price Price in the smallest unit of the token
+     */
+    function setVoucherPrice(
+        address tokenAddress,
+        uint256 price
     ) external onlyOwner {
-        voucherBasePriceUSD = _voucherPrice;
-        gymRegistrationBaseFeeUSD = _gymRegistrationFee;
-        tierUpgradeBaseFeeUSD = _tierUpgradeFee;
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+        require(price > 0, "Treasury: price must be greater than zero");
 
-        emit PriceUpdated("voucherBase", _voucherPrice);
-        emit PriceUpdated("gymRegistration", _gymRegistrationFee);
-        emit PriceUpdated("tierUpgrade", _tierUpgradeFee);
+        voucherPrices[tokenAddress] = price;
+        emit VoucherPriceUpdated(tokenAddress, price);
     }
 
     /**
-     * @dev Calculate price for a voucher
-     * @param tokenAddress Address of the token used for payment
-     * @param tier Tier level of the voucher
-     * @param duration Duration in days
+     * @dev Calculates the price of a voucher based on tier and duration
+     * @param tokenAddress Address of the token for payment
+     * @param tier Tier of the voucher
+     * @param duration Duration of the voucher in days
      * @return price Calculated price
      */
     function calculatePrice(
@@ -98,128 +106,250 @@ contract Treasury is Ownable {
         uint256 tier,
         uint256 duration
     ) external view returns (uint256 price) {
-        // Basic calculation: base price * tier factor * duration factor
-        uint256 tierFactor = 100 + tier;
-        uint256 durationFactor = duration;
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+        require(tier > 0, "Treasury: tier must be greater than zero");
+        require(duration > 0, "Treasury: duration must be greater than zero");
 
-        // Calculate price in USD
-        uint256 priceUSD = (voucherBasePriceUSD * tierFactor * durationFactor) /
-            10000;
+        // Base price of the voucher for the specified token
+        uint256 basePrice = voucherPrices[tokenAddress];
 
-        // In a real implementation, convert USD to token amount using oracles
-        // For simplicity, we'll assume 1:1 conversion here
-        return priceUSD;
+        // Price increases based on tier and duration
+        // Simple formula: basePrice * tier * (duration / 30)
+        // Assuming 30 days is the base period
+        return (basePrice * tier * duration) / 30;
     }
 
     /**
-     * @dev Calculate fee for upgrading a gym tier
-     * @param currentTier Current tier level
-     * @param newTier New tier level
-     * @return fee Calculated upgrade fee
+     * @dev Calculates the price of a voucher based on tier
+     * @param tokenAddress Address of the token for payment
+     * @param tier Tier of the voucher
+     * @return price Calculated price
+     */
+    function calculateVoucherPrice(
+        address tokenAddress,
+        uint256 tier
+    ) public view returns (uint256 price) {
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+        require(tier > 0, "Treasury: tier must be greater than zero");
+
+        // Base price of the voucher for the specified token
+        uint256 basePrice = voucherPrices[tokenAddress];
+
+        // Price increases based on tier
+        // Simple formula: basePrice * tier
+        return basePrice * tier;
+    }
+
+    /**
+     * @dev Validates if a token is accepted
+     * @param tokenAddress Address of the token to be validated
+     * @return valid True if the token is accepted
+     */
+    function validateToken(
+        address tokenAddress
+    ) external view returns (bool valid) {
+        return acceptedTokens[tokenAddress];
+    }
+
+    /**
+     * @dev Validates if an address has sufficient staking for gym registration
+     * @param staker Address of the potential gym registrant
+     * @return valid True if staking amount is sufficient
+     */
+    function validateGymStaking(
+        address staker
+    ) external view returns (bool valid) {
+        // Obter o número de academias já registradas pelo staker
+        uint256 registeredGyms = getRegisteredGymCount(staker);
+
+        // Calcular o staking mínimo necessário
+        // Número de academias atuais + 1 (para a nova academia) * valor mínimo por academia
+        uint256 requiredStaking = minimumGymStakingAmount *
+            (registeredGyms + 1);
+
+        // Verificar se o staker tem o staking mínimo necessário
+        return getStakedAmount(staker) >= requiredStaking;
+    }
+
+    /**
+     * @dev Returns the number of gyms registered by an address
+     * @param owner Address of the gym owner
+     * @return count Number of registered gyms
+     */
+    function getRegisteredGymCount(
+        address owner
+    ) public view returns (uint256 count) {
+        if (address(gymNFT) != address(0)) {
+            return gymNFT.balanceOf(owner);
+        }
+        return 0;
+    }
+
+    /**
+     * @dev Returns the amount staked by an address
+     * @param staker Address of the staker
+     * @return amount Staked amount
+     */
+    function getStakedAmount(
+        address staker
+    ) public view returns (uint256 amount) {
+        // Esta é uma implementação de placeholder
+        // Na implementação real, você consultaria o contrato de staking
+        return 0; // Substituir por uma chamada real ao contrato de staking
+    }
+
+    /**
+     * @dev Validates token payment
+     * @param user Address of the user
+     * @param amount Amount of the payment
+     * @return success True if the payment is valid
+     */
+    function validateTokenPayment(
+        address user,
+        uint256 amount
+    ) external view returns (bool success) {
+        // Simple implementation: check if the user has sufficient balance
+        // In a real implementation, you would check approvals, etc.
+
+        address tokenAddress = getFirstAcceptedToken();
+        require(tokenAddress != address(0), "Treasury: no accepted tokens");
+
+        IERC20 token = IERC20(tokenAddress);
+        return
+            token.balanceOf(user) >= amount &&
+            token.allowance(user, address(this)) >= amount;
+    }
+
+    /**
+     * @dev Processes gym reward
+     * @param gym Address of the gym to reward
+     * @param tokenAddress Address of the token for payment
+     * @param amount Amount to be rewarded
+     */
+    function processGymReward(
+        address gym,
+        address tokenAddress,
+        uint256 amount
+    ) external nonReentrant onlyOwner {
+        require(gym != address(0), "Treasury: invalid gym address");
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+        require(amount > 0, "Treasury: amount must be greater than zero");
+
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Treasury: insufficient balance");
+
+        token.safeTransfer(gym, amount);
+        emit PaymentSent(tokenAddress, amount, gym);
+    }
+
+    /**
+     * @dev Processes redemption
+     * @param tokenAddress Address of the token for redemption
+     * @param to Destination address of the redemption
+     * @param amount Amount to be redeemed
+     */
+    function processRedemption(
+        address tokenAddress,
+        address to,
+        uint256 amount
+    ) external nonReentrant onlyOwner {
+        require(to != address(0), "Treasury: invalid destination address");
+        require(acceptedTokens[tokenAddress], "Treasury: token not accepted");
+        require(amount > 0, "Treasury: amount must be greater than zero");
+
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Treasury: insufficient balance");
+
+        token.safeTransfer(to, amount);
+        emit PaymentSent(tokenAddress, amount, to);
+    }
+
+    /**
+     * @dev Withdraws tokens from the treasury (only owner)
+     * @param tokenAddress Address of the token to be withdrawn
+     * @param to Destination address
+     * @param amount Amount to be withdrawn
+     */
+    function withdrawToken(
+        address tokenAddress,
+        address to,
+        uint256 amount
+    ) external nonReentrant onlyOwner {
+        require(to != address(0), "Treasury: invalid destination address");
+        require(amount > 0, "Treasury: amount must be greater than zero");
+
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Treasury: insufficient balance");
+
+        token.safeTransfer(to, amount);
+        emit Withdrawal(tokenAddress, amount, to);
+    }
+
+    /**
+     * @dev Returns the balance of a specific token in the treasury
+     * @param tokenAddress Address of the token
+     * @return balance Balance of the token
+     */
+    function getTokenBalance(
+        address tokenAddress
+    ) external view returns (uint256 balance) {
+        return IERC20(tokenAddress).balanceOf(address(this));
+    }
+
+    /**
+     * @dev Calculates the upgrade fee
+     * @param currentTier Current tier of the gym
+     * @param newTier New tier desired
+     * @return fee Calculated fee
      */
     function calculateUpgradeFee(
         uint8 currentTier,
         uint8 newTier
     ) external view returns (uint256 fee) {
-        require(newTier > currentTier, "New tier must be higher");
+        require(
+            newTier > currentTier,
+            "Treasury: new tier must be higher than current"
+        );
 
-        // Basic calculation: base fee * tier difference
+        // Simple implementation: charge more for higher tiers
         uint256 tierDifference = newTier - currentTier;
 
-        return tierUpgradeBaseFeeUSD * tierDifference;
+        // Use the price of the voucher of the first accepted token as base
+        address tokenAddress = getFirstAcceptedToken();
+        require(tokenAddress != address(0), "Treasury: no accepted tokens");
+
+        // Fee is proportional to the tier difference
+        return voucherPrices[tokenAddress] * tierDifference;
     }
 
     /**
-     * @dev Validate if a token is accepted
-     * @param tokenAddress Address of the token
-     * @return isValid True if the token is accepted
+     * @dev Gets the first accepted token
+     * @return tokenAddress Address of the first accepted token
      */
-    function validateToken(
-        address tokenAddress
-    ) external view returns (bool isValid) {
-        return acceptedTokens[tokenAddress];
+    function getFirstAcceptedToken()
+        public
+        view
+        returns (address tokenAddress)
+    {
+        // Simple example to return the first token found
+        // In a real implementation, you would have a list or more sophisticated mechanism
+
+        // This is a very inefficient implementation, just for example
+        for (uint i = 0; i < 1000; i++) {
+            address potentialToken = address(uint160(i + 1));
+            if (acceptedTokens[potentialToken]) {
+                return potentialToken;
+            }
+        }
+
+        return address(0); // Returns 0 if no token is found
     }
 
-    /**
-     * @dev Validate and process a payment
-     * @param tier Tier level for the payment
-     * @return success True if the payment is valid
-     */
-    function validatePayment(uint8 tier) external view returns (bool success) {
-        // In a real implementation, this would verify payment amounts
-        // For this skeleton, we'll just return true
-        return true;
-    }
-
-    /**
-     * @dev Validate and process a token payment
-     * @param payer Address of the payer
-     * @param amount Amount to pay
-     * @return success True if the payment is successful
-     */
-    function validateTokenPayment(
-        address payer,
-        uint256 amount
-    ) external view returns (bool success) {
-        // In a real implementation, this would verify token transfers
-        // For this skeleton, we'll just return true
-        return true;
-    }
-
-    /**
-     * @dev Process gym reward payment
-     * @param gym Address of the gym to reward
-     * @param amount Amount to pay
-     */
-    function processGymReward(address gym, uint256 amount) external {
-        // In a real implementation, this would transfer tokens to the gym
-        // For now, emit an event to simulate the transfer
-        emit PaymentSent(gym, address(0), amount);
-    }
-
-    /**
-     * @dev Process DCP redemption
-     * @param gymId ID of the gym
-     * @param amount Amount of DCP to redeem
-     */
-    function processRedemption(uint256 gymId, uint256 amount) external {
-        // In a real implementation, this would calculate and transfer tokens
-        // For now, emit an event to simulate the process
-        emit PaymentReceived(msg.sender, address(0), amount);
-    }
-
-    /**
-     * @dev Set voucher base price
-     * @param _price New voucher base price
-     */
-    function setVoucherBasePrice(uint256 _price) external onlyOwner {
-        voucherBasePriceUSD = _price;
-        emit PriceUpdated("voucherBasePrice", _price);
-    }
-
-    /**
-     * @dev Set gym registration base fee
-     * @param _fee New gym registration base fee
-     */
-    function setGymRegistrationBaseFee(uint256 _fee) external onlyOwner {
-        gymRegistrationBaseFeeUSD = _fee;
-        emit PriceUpdated("gymRegistrationBaseFee", _fee);
-    }
-
-    /**
-     * @dev Set tier upgrade base fee
-     * @param _fee New tier upgrade base fee
-     */
-    function setTierUpgradeBaseFee(uint256 _fee) external onlyOwner {
-        tierUpgradeBaseFeeUSD = _fee;
-        emit PriceUpdated("tierUpgradeBaseFee", _fee);
-    }
-
-    /**
-     * @dev Set treasury wallet address
-     * @param _wallet New treasury wallet address
-     */
-    function setTreasuryWallet(address _wallet) external onlyOwner {
-        treasuryWallet = _wallet;
+    function setGymNFT(address _gymNFT) external onlyOwner {
+        require(_gymNFT != address(0), "Treasury: invalid GymNFT address");
+        gymNFT = GymNFT(_gymNFT);
     }
 }

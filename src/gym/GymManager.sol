@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.20;
 
 import "./GymNFT.sol";
 import "../treasury/Treasury.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title GymManager
@@ -59,8 +60,11 @@ contract GymManager {
         uint256[2] memory location,
         uint8 tier
     ) external returns (uint256 gymId) {
-        // Validate payment through treasury
-        require(treasury.validatePayment(tier), "Payment validation failed");
+        // Validate that the user has sufficient staking
+        require(
+            treasury.validateGymStaking(msg.sender),
+            "Insufficient staking amount"
+        );
 
         // Mint GymNFT
         gymId = gymNFT.mintGymNFT(msg.sender, tier);
@@ -168,5 +172,10 @@ contract GymManager {
         // This is a placeholder
         uint256[] memory result = new uint256[](0);
         return result;
+    }
+
+    function getRegistrationToken() internal view returns (address) {
+        // Usar a função pública do Treasury para obter o primeiro token aceito
+        return treasury.getFirstAcceptedToken();
     }
 }
