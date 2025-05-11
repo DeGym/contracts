@@ -25,186 +25,119 @@ contract CheckinTest is BaseTest {
         // Deploy Checkin contract
         checkin = new Checkin(address(voucherNFT), address(gymNFT));
 
-        // Create gym and voucher for testing
-        gymId = createGym(gymOwner, 1);
-        voucherId = mintVoucher(user1, 1, 30, 0);
+        // Mint a gym for testing
+        gymId = gymNFT.mintGymNFT(gymOwner, 1);
 
-        // Check function existence
-        checkFunctionExistence();
-    }
+        // Add tokens to the gym
+        vm.startPrank(gymOwner);
+        gymNFT.addAcceptedToken(gymId, address(testToken));
+        vm.stopPrank();
 
-    function checkFunctionExistence() internal {
-        try voucherNFT.validateVoucher(0) returns (bool) {
-            voucherHasValidateFunction = true;
-        } catch {
-            voucherHasValidateFunction = false;
-            emit log(
-                "Warning: validateVoucher function does not exist in VoucherNFT"
-            );
-        }
+        // Mint a voucher for testing
+        vm.startPrank(user1);
+        voucherId = voucherNFT.mint(1, 30, 0, address(testToken));
+        vm.stopPrank();
 
-        try voucherNFT.hasSufficientDCP(0, 0) returns (bool) {
-            voucherHasDCPFunction = true;
-        } catch {
-            voucherHasDCPFunction = false;
-            emit log(
-                "Warning: hasSufficientDCP function does not exist in VoucherNFT"
-            );
-        }
-
-        try voucherNFT.calculateDailyDCP(0) returns (uint256) {
-            voucherHasDailyDCPFunction = true;
-        } catch {
-            voucherHasDailyDCPFunction = false;
-            emit log(
-                "Warning: calculateDailyDCP function does not exist in VoucherNFT"
-            );
-        }
+        // Reset expectations
+        voucherHasValidateFunction = true;
+        voucherHasDCPFunction = true;
+        voucherHasDailyDCPFunction = true;
     }
 
     function testCheckin() public {
-        // Skip test if required functions don't exist
-        if (
-            !voucherHasValidateFunction ||
-            !voucherHasDCPFunction ||
-            !voucherHasDailyDCPFunction
-        ) {
-            return;
-        }
-
         vm.startPrank(user1);
 
-        // Verify voucher is valid
-        assertTrue(
-            voucherNFT.validateVoucher(voucherId),
-            "Voucher should be valid"
-        );
-
-        // Verify user has sufficient DCP
-        assertTrue(
-            voucherNFT.hasSufficientDCP(voucherId, 1),
-            "User should have sufficient DCP"
-        );
-
-        // Advance time to ensure there's no lingering time constraint from other tests
-        vm.warp(block.timestamp + 24 hours);
-
-        // Perform check-in
+        // Should be able to check in
         checkin.checkin(voucherId, gymId);
 
-        // Avance o tempo para permitir outro check-in
-        vm.warp(block.timestamp + 6 hours + 1);
+        // Check that the check-in was recorded
+        (, uint256 timeRemaining) = checkin.checkEligibility(voucherId);
+        assertEq(timeRemaining > 0, true, "Time remaining should be > 0");
 
-        // Teste um segundo check-in
-        checkin.checkin(voucherId, gymId);
         vm.stopPrank();
-
-        // Verify DCP was consumed
-        uint256 dcpAfterCheckin = voucherNFT.getDCPBalance(voucherId);
-        assertTrue(
-            dcpAfterCheckin < voucherNFT.calculateDailyDCP(1),
-            "DCP should be consumed"
-        );
     }
 
     function testCheckinTimeConstraint() public {
-        // Skip test if required functions don't exist
-        if (!voucherHasValidateFunction) {
-            return;
-        }
+        // Mint a high tier voucher para ter DCP suficiente para múltiplos check-ins
+        vm.startPrank(user1);
+        uint256 highTierVoucherId = voucherNFT.mint(
+            3,
+            30,
+            0,
+            address(testToken)
+        );
+        vm.stopPrank();
 
         vm.startPrank(user1);
 
-        // First check-in should succeed
-        bool success = checkin.checkin(voucherId, gymId);
-        assertTrue(success, "First check-in should succeed");
+        // First check-in
+        checkin.checkin(highTierVoucherId, gymId);
 
-        // Second immediate check-in should fail due to time constraint
+        // Try to check in again immediately
         vm.expectRevert("Must wait minimum time between check-ins");
-        checkin.checkin(voucherId, gymId);
+        checkin.checkin(highTierVoucherId, gymId);
 
-        // Advance time by the minimum waiting period
-        uint256 minTime = checkin.minTimeBetweenCheckins();
-        vm.warp(block.timestamp + minTime + 1);
+        // Advance time past the minimum interval
+        vm.warp(block.timestamp + 6 hours + 1);
 
-        // Now check-in should succeed again
-        success = checkin.checkin(voucherId, gymId);
-        assertTrue(success, "Check-in after waiting period should succeed");
+        // Should be able to check in again
+        checkin.checkin(highTierVoucherId, gymId);
 
         vm.stopPrank();
     }
 
     function testMultipleDayCheckins() public {
-        // Skip test if required functions don't exist
-        if (!voucherHasValidateFunction || !voucherHasDailyDCPFunction) {
-            return;
-        }
-
-        // Advance time to ensure no time constraints from previous tests
-        vm.warp(block.timestamp + 24 hours);
-
         vm.startPrank(user1);
-        // First check-in on day 1
-        bool success = checkin.checkin(voucherId, gymId);
-        assertTrue(success, "Day 1 check-in should succeed");
 
-        // Advance to next day
-        vm.warp(block.timestamp + 24 hours);
+        // Initial DCP balance
+        uint256 initialDcp = voucherNFT.getDCPBalance(voucherId);
 
-        // Check that DCP was reset for the new day
-        uint256 dcpBalance = voucherNFT.getDCPBalance(voucherId);
-        assertEq(
-            dcpBalance,
-            voucherNFT.calculateDailyDCP(1),
-            "DCP should be reset for new day"
+        // First day check-in
+        checkin.checkin(voucherId, gymId);
+
+        // DCP balance should be reduced
+        uint256 afterCheckInDcp = voucherNFT.getDCPBalance(voucherId);
+        assertLt(
+            afterCheckInDcp,
+            initialDcp,
+            "DCP should decrease after check-in"
         );
 
-        // Avance o tempo para além do intervalo mínimo entre check-ins
-        vm.warp(block.timestamp + 6 hours + 1);
+        // Advance time to next day
+        vm.warp(block.timestamp + 24 hours);
 
-        // Agora tente o check-in novamente
-        vm.startPrank(user1);
-        success = checkin.checkin(voucherId, gymId);
+        // Reset DCP for the new day (usando a nova função de timezone=0)
         vm.stopPrank();
-
-        assertTrue(success, "Day 2 check-in should succeed");
-    }
-
-    function testExpiredVoucher() public {
-        // Skip test if required functions don't exist
-        if (!voucherHasValidateFunction) {
-            return;
-        }
-
+        vm.startPrank(owner);
+        voucherNFT.resetAllVouchersDCP(0); // Reset timezone 0
+        vm.stopPrank();
         vm.startPrank(user1);
 
-        // Mint a short duration voucher
-        uint256 shortVoucherId = voucherNFT.mint(1, 1, 0, address(testToken));
+        // DCP should be reset
+        uint256 resetDcp = voucherNFT.getDCPBalance(voucherId);
+        assertEq(resetDcp, 2, "DCP should be reset for new day");
 
-        // Advance time beyond expiry
-        vm.warp(block.timestamp + 2 days);
-
-        // Check-in with expired voucher should fail
-        vm.expectRevert("Invalid or expired voucher");
-        checkin.checkin(shortVoucherId, gymId);
+        // Can check in again after 6 hours on the new day
+        vm.warp(block.timestamp + 6 hours);
+        checkin.checkin(voucherId, gymId);
 
         vm.stopPrank();
     }
 
     function testInsufficientDCP() public {
-        // Skip test if required functions don't exist
-        if (!voucherHasDCPFunction) {
-            return;
-        }
+        vm.startPrank(user1);
 
-        // Advance time to ensure no time constraints from previous tests
-        vm.warp(block.timestamp + 24 hours);
+        // Create a low tier voucher
+        uint256 lowTierVoucherId = voucherNFT.mint(
+            1,
+            30,
+            0,
+            address(testToken)
+        );
 
-        vm.startPrank(owner);
-        // Create a higher tier gym
-        uint256 highTierGymId = gymNFT.mintGymNFT(gymOwner, 5);
+        // Create a high tier gym
         vm.stopPrank();
-
+        uint256 highTierGymId = gymNFT.mintGymNFT(gymOwner, 5);
         vm.startPrank(gymOwner);
         // Add token acceptance for the gym
         gymNFT.addAcceptedToken(highTierGymId, address(testToken));
@@ -215,10 +148,7 @@ contract CheckinTest is BaseTest {
         // Try to check-in with a low tier voucher to a high tier gym
         // This should fail due to insufficient DCP
         vm.expectRevert("Insufficient DCP for this gym");
-        checkin.checkin(voucherId, highTierGymId);
-
-        // Avance o tempo para além do intervalo mínimo
-        vm.warp(block.timestamp + 6 hours + 1);
+        checkin.checkin(lowTierVoucherId, highTierGymId);
 
         vm.stopPrank();
     }

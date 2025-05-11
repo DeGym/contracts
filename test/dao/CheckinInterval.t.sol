@@ -4,100 +4,104 @@ pragma solidity ^0.8.20;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {Checkin} from "../../src/dao/Checkin.sol";
 
+/**
+ * @title CheckinIntervalTest
+ * @dev Test suite for the interval functionality in the Checkin contract
+ */
 contract CheckinIntervalTest is BaseTest {
     Checkin public checkin;
-
-    uint256 public voucherId;
-    uint256 public gymId;
+    uint256 public testGymId;
+    uint256 public testVoucherId;
 
     function setUp() public override {
         super.setUp();
 
+        // Deploy Checkin contract
         checkin = new Checkin(address(voucherNFT), address(gymNFT));
 
-        // Setup gym
-        gymId = createGym(gymOwner, 1);
+        // Create a gym
+        testGymId = gymNFT.mintGymNFT(gymOwner, 1);
 
-        // Setup voucher
-        voucherId = mintVoucher(user1, 1, 30, 0);
+        // Add token acceptance
+        vm.startPrank(gymOwner);
+        gymNFT.addAcceptedToken(testGymId, address(testToken));
+        vm.stopPrank();
+
+        // Create a voucher
+        vm.startPrank(user1);
+        testVoucherId = voucherNFT.mint(1, 30, 0, address(testToken));
+        vm.stopPrank();
+    }
+
+    function testContractReferences() public {
+        assertEq(address(checkin.voucherNFT()), address(voucherNFT));
+        assertEq(address(checkin.gymNFT()), address(gymNFT));
     }
 
     function testDefaultCheckInInterval() public {
-        // Default interval should be 6 hours
-        assertEq(checkin.minTimeBetweenCheckins(), 6 hours);
-    }
-
-    function testCanCheckIn() public {
-        // Criar um tokenId único para este teste
-        uint256 uniqueTokenId = 123;
-
-        // Setup novo mock para este ID específico
-        _setupMockVoucher(uniqueTokenId, user1);
-
-        // Resto do teste...
-        vm.startPrank(user1);
-        checkin.checkin(uniqueTokenId, gymId);
-        vm.stopPrank();
+        // Check default value
+        assertEq(
+            checkin.minTimeBetweenCheckins(),
+            6 hours,
+            "Default should be 6 hours"
+        );
     }
 
     function testUpdateMinTimeBetweenCheckins() public {
-        // Criar um tokenId único para este teste
-        uint256 uniqueTokenId = 456;
+        uint256 newValue = 12 hours;
 
-        // Setup novo mock para este ID específico
-        _setupMockVoucher(uniqueTokenId, user1);
-
-        // Resto do teste...
-        vm.startPrank(user1);
-        checkin.checkin(uniqueTokenId, gymId);
+        vm.startPrank(owner);
+        checkin.setMinTimeBetweenCheckins(newValue);
         vm.stopPrank();
+
+        assertEq(
+            checkin.minTimeBetweenCheckins(),
+            newValue,
+            "Should be updated"
+        );
+
+        // Test that non-owner cannot update
+        vm.startPrank(user1);
+        vm.expectRevert();
+        checkin.setMinTimeBetweenCheckins(1 hours);
+        vm.stopPrank();
+    }
+
+    function testCanCheckIn() public {
+        // First check-in should be allowed
+        assertTrue(
+            checkin.canCheckIn(testVoucherId),
+            "First check-in should be allowed"
+        );
+
+        // Check in
+        vm.startPrank(user1);
+        checkin.checkin(testVoucherId, testGymId);
+        vm.stopPrank();
+
+        // Should not be allowed immediately after
+        assertFalse(
+            checkin.canCheckIn(testVoucherId),
+            "Should not be allowed right after"
+        );
+
+        // Advance time past interval
+        vm.warp(block.timestamp + checkin.minTimeBetweenCheckins() + 1);
+
+        // Should be allowed again
+        assertTrue(
+            checkin.canCheckIn(testVoucherId),
+            "Should be allowed after interval"
+        );
     }
 
     function testFailCheckInTooSoon() public {
-        // Perform first check-in
+        // First check-in
         vm.startPrank(user1);
-        checkin.checkin(voucherId, gymId);
+        checkin.checkin(testVoucherId, testGymId);
 
-        // Try to check-in again immediately (should fail)
-        checkin.checkin(voucherId, gymId);
+        // Try checking in again immediately (should fail)
+        checkin.checkin(testVoucherId, testGymId);
         vm.stopPrank();
-    }
-
-    // Novo método para criar mock para qualquer tokenId
-    function _setupMockVoucher(uint256 tokenId, address recipient) internal {
-        vm.mockCall(
-            address(voucherNFT),
-            abi.encodeWithSelector(voucherNFT.ownerOf.selector, tokenId),
-            abi.encode(recipient)
-        );
-
-        vm.mockCall(
-            address(voucherNFT),
-            abi.encodeWithSelector(
-                voucherNFT.validateVoucher.selector,
-                tokenId
-            ),
-            abi.encode(true)
-        );
-
-        vm.mockCall(
-            address(voucherNFT),
-            abi.encodeWithSelector(
-                voucherNFT.hasSufficientDCP.selector,
-                tokenId,
-                uint8(1)
-            ),
-            abi.encode(true)
-        );
-
-        vm.mockCall(
-            address(voucherNFT),
-            abi.encodeWithSelector(
-                voucherNFT.requestCheckIn.selector,
-                tokenId,
-                gymId
-            ),
-            abi.encode(true)
-        );
     }
 }

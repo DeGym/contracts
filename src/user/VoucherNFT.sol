@@ -69,12 +69,13 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         uint256 indexed gymId,
         uint256 timestamp
     );
-    event DCPReset(uint256 indexed tokenId, uint128 newBalance);
+    event DCPReset(uint256 indexed tokenId, uint256 newBalance);
     event DCPConsumed(
         uint256 indexed tokenId,
         uint256 indexed gymId,
         uint128 amount
     );
+    event AllDCPReset(int8 indexed timezone, uint256 vouchersCount);
 
     /**
      * @dev Constructor
@@ -337,7 +338,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         voucher.lastDcpResetTime = uint40(
             _getTodayStartTimestamp(voucher.timezone)
         );
-        emit DCPReset(tokenId, voucher.dcpBalance);
+        emit DCPReset(tokenId, uint256(voucher.dcpBalance));
     }
 
     /**
@@ -368,19 +369,9 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
     function hasSufficientDCP(
         uint256 tokenId,
         uint8 gymTier
-    ) public view returns (bool hasEnough) {
-        Voucher storage voucher = vouchers[tokenId];
-        uint128 required = uint128(calculateDCP(gymTier));
-
-        // Se for um novo dia, precisamos considerar o reset de DCP
-        if (_shouldResetDCP(tokenId)) {
-            // Consideramos o valor de DCP que seria após o reset
-            uint128 dailyDCP = uint128(calculateDailyDCP(voucher.tier));
-            return dailyDCP >= required;
-        } else {
-            // Caso contrário, verificamos o saldo atual
-            return voucher.dcpBalance >= required;
-        }
+    ) public view returns (bool) {
+        uint256 requiredDCP = calculateDCP(gymTier);
+        return vouchers[tokenId].dcpBalance >= requiredDCP;
     }
 
     /**
@@ -480,5 +471,109 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
      */
     function getDCPBalance(uint256 tokenId) public view returns (uint256) {
         return vouchers[tokenId].dcpBalance;
+    }
+
+    /**
+     * @dev Calcula quando o próximo reset de DCP deve ocorrer com base no timezone
+     * @param lastResetTime O timestamp do último reset
+     * @param timezone O fuso horário do usuário (-12 a +14)
+     * @return O timestamp quando o próximo reset deve ocorrer
+     */
+    function calculateNextResetTime(
+        uint256 lastResetTime,
+        int8 timezone
+    ) public pure returns (uint256) {
+        // Converte o timezone de horas para segundos
+        int256 timezoneOffset = int256(timezone) * 3600;
+
+        // Determina a hora UTC que representa meia-noite no fuso horário do usuário
+        // Exemplo: se timezone = -3, meia-noite local = 3:00 UTC
+        uint256 secondsInDay = 24 hours;
+
+        // Ajusta o timestamp inicial para o fuso horário do usuário
+        uint256 userLocalTime = uint256(int256(lastResetTime) + timezoneOffset);
+
+        // Calcula o início do dia (meia-noite) no fuso horário do usuário
+        uint256 startOfUserDay = userLocalTime - (userLocalTime % secondsInDay);
+
+        // Calcula o início do próximo dia
+        uint256 startOfNextUserDay = startOfUserDay + secondsInDay;
+
+        // Converte de volta para UTC
+        return uint256(int256(startOfNextUserDay) - timezoneOffset);
+    }
+
+    /**
+     * @dev Reseta o DCP de todos os vouchers em um determinado timezone
+     * @param timezone O fuso horário para resetar (-12 a +14)
+     */
+    function resetAllVouchersDCP(int8 timezone) external onlyOwner {
+        require(timezone >= -12 && timezone <= 14, "Invalid timezone");
+
+        uint256 totalSupply = totalSupply();
+        uint256 count = 0;
+
+        // Calcular o timestamp que representa o início do dia atual neste timezone
+        uint256 todayTimestamp = _getTodayStartTimestamp(timezone);
+
+        for (uint256 i = 0; i < totalSupply; i++) {
+            uint256 tokenId = tokenByIndex(i);
+            Voucher storage voucher = vouchers[tokenId];
+
+            // Verifica se o voucher está no timezone especificado
+            if (voucher.timezone == timezone) {
+                // Verifica se o voucher ainda não foi resetado hoje
+                if (voucher.lastDcpResetTime < todayTimestamp) {
+                    // Reseta o DCP e atualiza o timestamp
+                    voucher.dcpBalance = uint128(calculateDCP(voucher.tier));
+                    voucher.lastDcpResetTime = uint40(block.timestamp);
+
+                    emit DCPReset(tokenId, uint256(voucher.dcpBalance));
+                    count++;
+                }
+            }
+        }
+
+        emit AllDCPReset(timezone, count);
+    }
+
+    /**
+     * @dev Consome uma quantidade de DCP de um voucher
+     * @param tokenId ID do voucher
+     * @param amount Quantidade de DCP a ser consumida
+     */
+    function consumeDCP(uint256 tokenId, uint256 amount) external {
+        require(exists(tokenId), "VoucherNFT: token does not exist");
+        require(
+            vouchers[tokenId].dcpBalance >= amount,
+            "VoucherNFT: insufficient DCP"
+        );
+
+        // Reduz o saldo de DCP
+        vouchers[tokenId].dcpBalance -= uint128(amount);
+        // Registra o último valor consumido
+        vouchers[tokenId].dcpLastConsumed = uint128(amount);
+
+        emit DCPConsumed(tokenId, 0, uint128(amount)); // gymId é 0 pois será registrado em registerCheckIn
+    }
+
+    /**
+     * @dev Registra um check-in para um voucher em uma academia específica
+     * @param tokenId ID do voucher
+     * @param gymId ID da academia
+     */
+    function registerCheckIn(uint256 tokenId, uint256 gymId) external {
+        require(exists(tokenId), "VoucherNFT: token does not exist");
+
+        // Adiciona o check-in ao histórico
+        checkInHistory[tokenId].push(
+            CheckInRecord({gymId: gymId, timestamp: block.timestamp})
+        );
+
+        // Registra check-in por dia (para limites diários, se necessário)
+        uint256 today = block.timestamp / 1 days;
+        checkInsPerGymPerDay[tokenId][gymId][today]++;
+
+        emit CheckInCreated(tokenId, gymId, block.timestamp);
     }
 }

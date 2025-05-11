@@ -75,47 +75,42 @@ contract Checkin is Ownable, ReentrancyGuard {
         uint256 voucherId,
         uint256 gymId
     ) external nonReentrant returns (bool success) {
-        // Verify the caller is the owner of the voucher
+        // Verificações de tempo entre check-ins
         require(
-            voucherNFT.ownerOf(voucherId) == msg.sender,
-            "Not the voucher owner"
+            canCheckIn(voucherId),
+            "Must wait minimum time between check-ins"
         );
 
-        // Validate the voucher
+        // Verificar se o voucher é válido
         require(
             voucherNFT.validateVoucher(voucherId),
             "Invalid or expired voucher"
         );
 
-        // Check time constraints
-        require(
-            block.timestamp >=
-                lastCheckinTime[voucherId] + minTimeBetweenCheckins,
-            "Must wait minimum time between check-ins"
-        );
+        // Obter o tier da academia
+        uint8 gymTier = gymNFT.getTier(gymId);
 
-        // Get gym tier
-        uint8 gymTier = gymNFT.getCurrentTier(gymId);
-
-        // Check if user has enough DCP for this gym
+        // Verificar se há DCP suficiente (isso já vai chamar resetDCPIfNewDay internamente)
         require(
             voucherNFT.hasSufficientDCP(voucherId, gymTier),
             "Insufficient DCP for this gym"
         );
 
-        // Check if user has not reached daily limit for this gym
-        // This is now handled inside the VoucherNFT contract
+        // Consumir o DCP e transferir para a academia
+        uint256 dcpRequired = 2 ** uint256(gymTier);
+        voucherNFT.consumeDCP(voucherId, dcpRequired);
 
-        // Update last check-in time
+        // Registrar o check-in no histórico
+        voucherNFT.registerCheckIn(voucherId, gymId);
+
+        // Notificar a academia sobre o check-in
+        gymNFT.receiveDCP(gymId, dcpRequired);
+
+        // Atualizar última vez que o usuário fez check-in
         lastCheckinTime[voucherId] = block.timestamp;
 
-        // Request check-in in VoucherNFT (this will handle DCP deduction and check-in record)
-        require(
-            voucherNFT.requestCheckIn(voucherId, gymId),
-            "Check-in processing failed"
-        );
-
         emit CheckinCompleted(voucherId, gymId, block.timestamp);
+
         return true;
     }
 

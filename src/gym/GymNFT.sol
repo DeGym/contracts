@@ -25,7 +25,6 @@ contract GymNFT is ERC721, Ownable {
     // Gym tier information
     struct GymTierInfo {
         uint8 tier;
-        uint256 dcpBalance;
         uint256 lastTierUpdateTime;
     }
 
@@ -47,6 +46,9 @@ contract GymNFT is ERC721, Ownable {
     // Mapeamento de academias para seus tokens aceitos
     mapping(uint256 => AcceptedTokens) private gymAcceptedTokens;
 
+    // Mapeamento de academias para balanço de DCP por token aceito
+    mapping(uint256 => mapping(address => uint256)) private gymTokenDCPBalance;
+
     // Events
     event GymNFTCreated(
         uint256 indexed gymId,
@@ -56,11 +58,12 @@ contract GymNFT is ERC721, Ownable {
     event TierUpdated(uint256 indexed gymId, uint8 oldTier, uint8 newTier);
     event DCPReceived(
         uint256 indexed gymId,
-        uint256 amount,
-        uint256 rewardAmount
+        address indexed token,
+        uint256 amount
     );
     event DCPRedeemed(
         uint256 indexed gymId,
+        address indexed token,
         uint256 amount,
         uint256 rewardAmount
     );
@@ -95,7 +98,6 @@ contract GymNFT is ERC721, Ownable {
         // Initialize tier info
         gymTierInfo[gymId] = GymTierInfo({
             tier: tier,
-            dcpBalance: 0,
             lastTierUpdateTime: block.timestamp
         });
 
@@ -125,74 +127,116 @@ contract GymNFT is ERC721, Ownable {
     }
 
     /**
-     * @dev Receive DCP from check-ins
+     * @dev Adds DCP to a gym for a specific token
      * @param gymId ID of the gym
-     * @param amount Amount of DCP
+     * @param token Address of the token
+     * @param amount Amount of DCP to add
      */
-    function receiveDCP(uint256 gymId, uint256 amount) external {
-        // Only authorized contracts should call this
-        // In production, add appropriate access control
-
-        // Update DCP balance
-        gymTierInfo[gymId].dcpBalance += amount;
-
-        // Calculate reward based on tier
-        uint8 tier = gymTierInfo[gymId].tier;
-        uint256 rewardAmount = calculateReward(amount, tier);
-
-        // Update stats
-        Stats storage stats = gymStats[gymId];
-        stats.totalCheckIns += 1;
-        stats.totalDCPReceived += amount;
-        stats.totalRewardsEarned += rewardAmount;
-        stats.lastActivityTime = block.timestamp;
-
-        // Process reward through treasury
-        distributeRewards(gymId, rewardAmount, address(0));
-
-        emit DCPReceived(gymId, amount, rewardAmount);
-    }
-
-    /**
-     * @dev Redeem DCP for rewards
-     * @param gymId ID of the gym
-     * @param amount Amount of DCP to redeem
-     */
-    function redeemDCP(uint256 gymId, uint256 amount) external {
-        // Verify caller is the gym owner
-        require(ownerOf(gymId) == msg.sender, "Not the gym owner");
-
-        // Validate balance
+    function addDCP(uint256 gymId, address token, uint256 amount) external {
+        require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
         require(
-            gymTierInfo[gymId].dcpBalance >= amount,
-            "Insufficient DCP balance"
+            isTokenAccepted(gymId, token),
+            "GymNFT: token not accepted by gym"
         );
 
-        // Update balance
-        gymTierInfo[gymId].dcpBalance -= amount;
+        // Adiciona DCP ao balanço específico do token
+        gymTokenDCPBalance[gymId][token] += amount;
 
-        // Calculate reward
-        uint8 tier = gymTierInfo[gymId].tier;
-        uint256 rewardAmount = calculateReward(amount, tier);
+        // Atualiza as estatísticas gerais
+        gymStats[gymId].totalDCPReceived += amount;
+        gymStats[gymId].lastActivityTime = block.timestamp;
 
-        // Process redemption through treasury
-        distributeRewards(gymId, rewardAmount, address(0));
-
-        emit DCPRedeemed(gymId, amount, rewardAmount);
+        emit DCPReceived(gymId, token, amount);
     }
 
     /**
-     * @dev Calculate reward based on amount and tier
-     * @param amount Amount of DCP
-     * @param tier Tier level
-     * @return rewardAmount Calculated reward
+     * @dev Returns the DCP balance for a specific token
+     * @param gymId ID of the gym
+     * @param token Address of the token
+     * @return Balance of DCP for the specified token
+     */
+    function getDCPBalance(
+        uint256 gymId,
+        address token
+    ) public view returns (uint256) {
+        return gymTokenDCPBalance[gymId][token];
+    }
+
+    /**
+     * @dev Processes redemption of DCP for rewards
+     * @param gymId ID of the gym
+     * @param token Address of the token to redeem rewards in
+     * @return Amount of tokens the gym owner will receive
+     */
+    function redeemDCP(
+        uint256 gymId,
+        address token
+    ) external returns (uint256) {
+        require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
+        require(
+            ownerOf(gymId) == msg.sender,
+            "GymNFT: caller is not the gym owner"
+        );
+        require(
+            isTokenAccepted(gymId, token),
+            "GymNFT: token not accepted by gym"
+        );
+
+        uint256 dcpAmount = gymTokenDCPBalance[gymId][token];
+        require(dcpAmount > 0, "GymNFT: no DCP balance for this token");
+
+        // Calcula a quantidade de tokens a serem recompensados
+        // Este cálculo seria baseado em alguma fórmula definida pelo projeto
+        uint256 rewardAmount = calculateReward(dcpAmount, token);
+
+        // Zera o balanço de DCP para este token
+        gymTokenDCPBalance[gymId][token] = 0;
+
+        // Processa a recompensa através do Treasury
+        treasury.processGymReward(msg.sender, token, rewardAmount);
+
+        // Atualiza as estatísticas
+        gymStats[gymId].totalRewardsEarned += rewardAmount;
+
+        emit DCPRedeemed(gymId, token, dcpAmount, rewardAmount);
+
+        return rewardAmount;
+    }
+
+    /**
+     * @dev Checks if a token is accepted by a gym
+     * @param gymId ID of the gym
+     * @param token Address of the token
+     * @return Whether the token is accepted
+     */
+    function isTokenAccepted(
+        uint256 gymId,
+        address token
+    ) public view returns (bool) {
+        address[] memory tokens = gymAcceptedTokens[gymId].tokens;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == token) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @dev Calculate reward based on DCP amount and token
+     * @param dcpAmount Amount of DCP to convert
+     * @param token Address of the token
+     * @return Amount of tokens to reward
      */
     function calculateReward(
-        uint256 amount,
-        uint8 tier
-    ) public pure returns (uint256 rewardAmount) {
-        // Simple linear model: higher tiers get more rewards per DCP
-        return (amount * (100 + tier)) / 100;
+        uint256 dcpAmount,
+        address token
+    ) internal view returns (uint256) {
+        // Esta função implementaria a lógica específica para calcular recompensas
+        // Por exemplo, pode usar alguma taxa de conversão ou chamar o Treasury
+
+        // Implementação simplificada para exemplo
+        return dcpAmount; // 1:1 conversion for simplicity
     }
 
     /**
@@ -226,42 +270,6 @@ contract GymNFT is ERC721, Ownable {
         uint256 gymId
     ) external view returns (Stats memory stats) {
         return gymStats[gymId];
-    }
-
-    /**
-     * @dev Distribute rewards to the gym
-     * @param gymId ID of the gym
-     * @param rewardAmount Amount of rewards to distribute
-     * @param tokenToUse Endereço do token a ser usado (opcional, 0x0 para usar preferencial)
-     */
-    function distributeRewards(
-        uint256 gymId,
-        uint256 rewardAmount,
-        address tokenToUse
-    ) public {
-        // Verificar se o token foi especificado, senão usar o preferencial
-        if (tokenToUse == address(0)) {
-            tokenToUse = getPreferredToken(gymId);
-            // Se ainda for zero, tentar obter qualquer token aceito
-            if (tokenToUse == address(0)) {
-                tokenToUse = getFirstAcceptedToken(gymId);
-            }
-        }
-
-        // Verificar se o token é aceito pela academia
-        require(
-            isTokenAccepted(gymId, tokenToUse),
-            "Token not accepted by gym"
-        );
-
-        // Verificar se o token é aceito pelo treasury
-        require(
-            treasury.isTokenAccepted(tokenToUse),
-            "Token not accepted by treasury"
-        );
-
-        // Chamar a função atualizada
-        treasury.processGymReward(ownerOf(gymId), tokenToUse, rewardAmount);
     }
 
     /**
@@ -314,25 +322,6 @@ contract GymNFT is ERC721, Ownable {
     }
 
     /**
-     * @dev Verificar se um token é aceito por uma academia
-     * @param gymId ID da academia
-     * @param token Endereço do token
-     * @return bool Verdadeiro se o token for aceito
-     */
-    function isTokenAccepted(
-        uint256 gymId,
-        address token
-    ) public view returns (bool) {
-        address[] memory tokens = gymAcceptedTokens[gymId].tokens;
-        for (uint i = 0; i < tokens.length; i++) {
-            if (tokens[i] == token) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * @dev Obter o token preferencial de uma academia
      * @param gymId ID da academia
      * @return address Endereço do token preferencial
@@ -376,5 +365,42 @@ contract GymNFT is ERC721, Ownable {
         address owner
     ) public view virtual override returns (uint256 count) {
         return super.balanceOf(owner);
+    }
+
+    /**
+     * @dev Recebe DCP durante um check-in e usa o token preferencial da academia
+     * @param gymId ID da academia
+     * @param amount Quantidade de DCP
+     */
+    function receiveDCP(uint256 gymId, uint256 amount) external {
+        require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
+
+        // Usa o token preferencial da academia ou o primeiro token aceito
+        address token = getPreferredToken(gymId);
+        if (token == address(0)) {
+            token = getFirstAcceptedToken(gymId);
+        }
+
+        require(token != address(0), "GymNFT: no accepted token");
+
+        // Adiciona DCP ao balanço do token
+        gymTokenDCPBalance[gymId][token] += amount;
+
+        // Atualiza estatísticas
+        gymStats[gymId].totalDCPReceived += amount;
+        gymStats[gymId].lastActivityTime = block.timestamp;
+        gymStats[gymId].totalCheckIns += 1;
+
+        emit DCPReceived(gymId, token, amount);
+    }
+
+    /**
+     * @dev Retorna o tier atual de uma academia
+     * @param gymId ID da academia
+     * @return tier Tier atual da academia
+     */
+    function getTier(uint256 gymId) public view returns (uint8) {
+        require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
+        return gymTierInfo[gymId].tier;
     }
 }
