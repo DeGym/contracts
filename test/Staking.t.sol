@@ -7,7 +7,7 @@ import {BondPool} from "../src/staking/BondPool.sol";
 import {DeGymToken} from "../src/token/DGYM.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-contract StakeManagerTest is Test {
+contract StakingTest is Test {
     StakeManager public stakeManager;
     DeGymToken public token;
     uint256 private alicePrivateKey = 0xa11ce;
