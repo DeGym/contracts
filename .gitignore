@@ -13,3 +13,6 @@ docs/
 # Dotenv file
 .env
 broadcast
+
+# AI istructions
+instructions
