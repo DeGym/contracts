@@ -42,6 +42,11 @@ contract CheckinTest is BaseTest {
         voucherHasValidateFunction = true;
         voucherHasDCPFunction = true;
         voucherHasDailyDCPFunction = true;
+
+        // Configure o contrato Checkin no GymNFT
+        vm.startPrank(owner);
+        gymNFT.setCheckinContract(address(checkin));
+        vm.stopPrank();
     }
 
     function testCheckin() public {

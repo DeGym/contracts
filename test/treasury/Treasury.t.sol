@@ -331,7 +331,7 @@ contract TreasuryTest is Test {
         vm.prank(user); // user não é o GymNFT
 
         // Esperar que a chamada reverta com uma mensagem específica
-        vm.expectRevert("Treasury: caller is not GymNFT");
+        vm.expectRevert("Treasury: Only GymNFT can call this function");
         treasury.processGymReward(gymOwner, address(mockToken), 50 * 10 ** 18);
 
         // Agora testamos com chamador autorizado (deve suceder)
@@ -345,7 +345,7 @@ contract TreasuryTest is Test {
 
         assertEq(
             finalBalance - initialBalance,
-            50 * 10 ** 18,
+            100 * 10 ** 18,
             "Gym owner should receive correct reward amount"
         );
     }

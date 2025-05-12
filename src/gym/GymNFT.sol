@@ -13,6 +13,7 @@ import "../treasury/ITreasury.sol";
 contract GymNFT is ERC721, Ownable {
     // References to other contracts
     ITreasury public treasury;
+    address public checkinContract;
 
     // Gym statistics structure
     struct Stats {
@@ -69,6 +70,11 @@ contract GymNFT is ERC721, Ownable {
     );
     event TokenAccepted(uint256 indexed gymId, address indexed token);
     event PreferredTokenSet(uint256 indexed gymId, address indexed token);
+    event RewardsClaimed(
+        uint256 indexed gymId,
+        address indexed token,
+        uint256 amount
+    );
 
     /**
      * @dev Constructor
@@ -368,30 +374,51 @@ contract GymNFT is ERC721, Ownable {
     }
 
     /**
-     * @dev Recebe DCP durante um check-in e usa o token preferencial da academia
+     * @dev Registra DCP recebido de um check-in e o associa ao token correto
      * @param gymId ID da academia
-     * @param amount Quantidade de DCP
+     * @param token Endereço do token associado ao VoucherNFT que fez check-in
+     * @param amount Quantidade de DCP recebido
      */
-    function receiveDCP(uint256 gymId, uint256 amount) external {
-        require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
+    function receiveDCP(
+        uint256 gymId,
+        address token,
+        uint256 amount
+    ) external onlyCheckinContract {
+        require(_ownerOf(gymId) != address(0), "GymNFT: Gym does not exist");
+        require(
+            isTokenAccepted(gymId, token),
+            "GymNFT: Token not accepted by gym"
+        );
 
-        // Usa o token preferencial da academia ou o primeiro token aceito
-        address token = getPreferredToken(gymId);
-        if (token == address(0)) {
-            token = getFirstAcceptedToken(gymId);
-        }
-
-        require(token != address(0), "GymNFT: no accepted token");
-
-        // Adiciona DCP ao balanço do token
+        // Adiciona DCP ao balanço do token específico
         gymTokenDCPBalance[gymId][token] += amount;
 
-        // Atualiza estatísticas
-        gymStats[gymId].totalDCPReceived += amount;
-        gymStats[gymId].lastActivityTime = block.timestamp;
-        gymStats[gymId].totalCheckIns += 1;
-
         emit DCPReceived(gymId, token, amount);
+    }
+
+    /**
+     * @dev Permite que o dono da academia saque recompensas baseadas no DCP acumulado
+     * @param gymId ID da academia
+     * @param token Endereço do token a ser sacado
+     */
+    function claimRewards(uint256 gymId, address token) external {
+        require(_ownerOf(gymId) != address(0), "GymNFT: Gym does not exist");
+        require(ownerOf(gymId) == msg.sender, "GymNFT: Not gym owner");
+        require(
+            isTokenAccepted(gymId, token),
+            "GymNFT: Token not accepted by gym"
+        );
+
+        uint256 dcpAmount = gymTokenDCPBalance[gymId][token];
+        require(dcpAmount > 0, "GymNFT: No DCP balance for this token");
+
+        // Zera o balanço antes da chamada externa (prevenção contra reentrancy)
+        gymTokenDCPBalance[gymId][token] = 0;
+
+        // Processa a recompensa via Treasury
+        treasury.processGymReward(msg.sender, token, dcpAmount);
+
+        emit RewardsClaimed(gymId, token, dcpAmount);
     }
 
     /**
@@ -402,5 +429,22 @@ contract GymNFT is ERC721, Ownable {
     function getTier(uint256 gymId) public view returns (uint8) {
         require(_ownerOf(gymId) != address(0), "GymNFT: gym does not exist");
         return gymTierInfo[gymId].tier;
+    }
+
+    function setCheckinContract(address _checkinContract) external onlyOwner {
+        checkinContract = _checkinContract;
+    }
+
+    modifier onlyCheckinContract() {
+        require(
+            msg.sender == checkinContract,
+            "GymNFT: caller is not the Checkin contract"
+        );
+        _;
+    }
+
+    // Adicione esta função auxiliar
+    function _exists(uint256 tokenId) internal view returns (bool) {
+        return _ownerOf(tokenId) != address(0);
     }
 }

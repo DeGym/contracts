@@ -31,6 +31,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         uint128 dcpLastConsumed; // 16 bytes
         uint16 duration; // 2 bytes - Em dias, max ~179 anos
         address paymentToken; // 20 bytes - Não pode ser packed com os outros
+        address tokenUsed; // 20 bytes - Não pode ser packed com os outros
     }
 
     // Check-in structure
@@ -144,7 +145,8 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
             lastDcpResetTime: uint40(_getTodayStartTimestamp(timezone)), // Convert to uint40
             dcpLastConsumed: 0,
             issueDate: uint40(block.timestamp), // Convert to uint40
-            paymentToken: tokenAddress
+            paymentToken: tokenAddress,
+            tokenUsed: tokenAddress
         });
 
         emit VoucherCreated(
@@ -244,7 +246,7 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         );
 
         // Notify GymNFT about the check-in
-        gymNFT.receiveDCP(gymId, dcpRequired);
+        gymNFT.receiveDCP(gymId, voucher.tokenUsed, dcpRequired);
 
         emit CheckInCreated(tokenId, gymId, block.timestamp);
         emit DCPConsumed(tokenId, gymId, dcpRequired);
@@ -575,5 +577,15 @@ contract VoucherNFT is ERC721Enumerable, Ownable {
         checkInsPerGymPerDay[tokenId][gymId][today]++;
 
         emit CheckInCreated(tokenId, gymId, block.timestamp);
+    }
+
+    /**
+     * @dev Retorna o token usado para mintar o voucher
+     * @param tokenId ID do voucher
+     * @return Endereço do token usado na mintagem
+     */
+    function getTokenUsed(uint256 tokenId) external view returns (address) {
+        require(exists(tokenId), "VoucherNFT: token does not exist");
+        return vouchers[tokenId].tokenUsed;
     }
 }

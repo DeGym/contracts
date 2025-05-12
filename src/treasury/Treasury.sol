@@ -294,26 +294,6 @@ contract Treasury is Ownable, ReentrancyGuard, ITreasury {
     }
 
     /**
-     * @dev Processa recompensas para donos de academias
-     * @param gymOwner Endereço do dono da academia
-     * @param token Endereço do token para recompensa
-     * @param amount Quantidade da recompensa
-     */
-    function processGymReward(
-        address gymOwner,
-        address token,
-        uint256 amount
-    ) external override whenNotPaused {
-        require(
-            msg.sender == address(gymNFT),
-            "Treasury: caller is not GymNFT"
-        );
-
-        // Processar a recompensa...
-        IERC20(token).safeTransfer(gymOwner, amount);
-    }
-
-    /**
      * @dev Obtém a lista completa de tokens aceitos
      * @return tokens Lista de endereços de tokens aceitos
      */
@@ -416,5 +396,29 @@ contract Treasury is Ownable, ReentrancyGuard, ITreasury {
             balance >= amount &&
             allowance >= amount &&
             amount >= minimumGymStakingAmount;
+    }
+
+    /**
+     * @dev Processa recompensas para academias com base no DCP acumulado
+     * @param recipient Endereço do destinatário das recompensas
+     * @param token Endereço do token para recompensa
+     * @param dcpAmount Quantidade de DCP a ser convertida em tokens
+     */
+    function processGymReward(
+        address recipient,
+        address token,
+        uint256 dcpAmount
+    ) external {
+        require(
+            msg.sender == address(gymNFT),
+            "Treasury: Only GymNFT can call this function"
+        );
+        require(isTokenAccepted(token), "Treasury: Token not accepted");
+
+        // Calcular a quantidade de tokens com base no DCP (implemente sua lógica aqui)
+        uint256 tokenAmount = calculatePrice(token, 1, 30);
+
+        // Transferir tokens para o destinatário
+        IERC20(token).safeTransfer(recipient, tokenAmount);
     }
 }

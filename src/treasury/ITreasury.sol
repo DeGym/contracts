@@ -14,18 +14,6 @@ interface ITreasury {
     function isTokenAccepted(address token) external view returns (bool);
 
     /**
-     * @dev Processa recompensas para donos de academias
-     * @param gymOwner Endereço do dono da academia
-     * @param token Endereço do token para recompensa
-     * @param amount Quantidade da recompensa
-     */
-    function processGymReward(
-        address gymOwner,
-        address token,
-        uint256 amount
-    ) external;
-
-    /**
      * @dev Calcula o preço de um voucher
      * @param token Endereço do token a ser usado
      * @param tier Nível do voucher
@@ -56,4 +44,16 @@ interface ITreasury {
         address token,
         uint256 amount
     ) external view returns (bool valid);
+
+    /**
+     * @dev Processa recompensas para donos de academias
+     * @param recipient Endereço do dono da academia
+     * @param token Endereço do token para recompensa
+     * @param dcpAmount Quantidade da recompensa
+     */
+    function processGymReward(
+        address recipient,
+        address token,
+        uint256 dcpAmount
+    ) external;
 }

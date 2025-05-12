@@ -66,52 +66,45 @@ contract Checkin is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Processes a check-in request
-     * @param voucherId ID of the user's voucher
-     * @param gymId ID of the gym
-     * @return success True if check-in was successful
+     * @dev Realiza o check-in de um usuário em uma academia
+     * @param voucherId ID do voucher do usuário
+     * @param gymId ID da academia
      */
-    function checkin(
-        uint256 voucherId,
-        uint256 gymId
-    ) external nonReentrant returns (bool success) {
-        // Verificações de tempo entre check-ins
+    function checkin(uint256 voucherId, uint256 gymId) public {
+        // Verificar se o check-in pode ser realizado
         require(
             canCheckIn(voucherId),
             "Must wait minimum time between check-ins"
         );
 
-        // Verificar se o voucher é válido
-        require(
-            voucherNFT.validateVoucher(voucherId),
-            "Invalid or expired voucher"
-        );
-
         // Obter o tier da academia
         uint8 gymTier = gymNFT.getTier(gymId);
 
-        // Verificar se há DCP suficiente (isso já vai chamar resetDCPIfNewDay internamente)
+        // Verificar se o voucher tem DCP suficiente
         require(
             voucherNFT.hasSufficientDCP(voucherId, gymTier),
             "Insufficient DCP for this gym"
         );
 
-        // Consumir o DCP e transferir para a academia
-        uint256 dcpRequired = 2 ** uint256(gymTier);
+        // Calcular o DCP necessário (2^gymTier)
+        uint256 dcpRequired = 1 << gymTier;
+
+        // Consumir o DCP do VoucherNFT
         voucherNFT.consumeDCP(voucherId, dcpRequired);
 
-        // Registrar o check-in no histórico
+        // Obter o token associado ao voucher
+        address tokenUsed = voucherNFT.getTokenUsed(voucherId);
+
+        // Transferir o DCP para a academia
+        gymNFT.receiveDCP(gymId, tokenUsed, dcpRequired);
+
+        // Registrar o check-in no histórico do voucher
         voucherNFT.registerCheckIn(voucherId, gymId);
 
-        // Notificar a academia sobre o check-in
-        gymNFT.receiveDCP(gymId, dcpRequired);
-
-        // Atualizar última vez que o usuário fez check-in
+        // Atualizar o timestamp do último check-in
         lastCheckinTime[voucherId] = block.timestamp;
 
         emit CheckinCompleted(voucherId, gymId, block.timestamp);
-
-        return true;
     }
 
     /**

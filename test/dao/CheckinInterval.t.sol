@@ -31,6 +31,11 @@ contract CheckinIntervalTest is BaseTest {
         vm.startPrank(user1);
         testVoucherId = voucherNFT.mint(1, 30, 0, address(testToken));
         vm.stopPrank();
+
+        // Configure o contrato Checkin no GymNFT
+        vm.startPrank(owner);
+        gymNFT.setCheckinContract(address(checkin));
+        vm.stopPrank();
     }
 
     function testContractReferences() public {
